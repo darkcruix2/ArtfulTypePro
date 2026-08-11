@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=ArtfulType Pro
+GenericName=Markdown Editor
+Comment=Dracula-themed distraction-free Markdown / Writer editor
+Exec=artfultype-rs %f
+Icon=artfultype-rs
+Terminal=false
+Type=Application
+Categories=Office;TextEditor;Utility;
+MimeType=text/markdown;text/x-markdown;text/plain;
+Keywords=markdown;writer;editor;notes;text;
+StartupNotify=true
+StartupWMClass=artfultype-rs

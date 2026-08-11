@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ArtfulType Pro</title>
+    <meta name="description" content="ArtfulType Pro — a beautiful Dracula-themed Markdown editor with Writer and Markdown modes." />
+    <script src="/highlighter.js" defer></script>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <div id="app">
+      <!-- ── Application Header ──────────────────────────────────── -->
+      <header id="app-header" class="glass-panel">
+        <div class="header-left">
+          <button id="main-menu-btn" class="icon-btn" title="Main Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+
+          <!-- TUI Menu Bar -->
+          <nav id="tui-menubar" class="tui-menubar">
+            <button id="tui-menu-file-btn" class="tui-menu-btn"><u>F</u>ile</button>
+            <button id="tui-menu-edit-btn" class="tui-menu-btn"><u>E</u>dit</button>
+            <button id="tui-menu-format-btn" class="tui-menu-btn">F<u>o</u>rmat</button>
+            <button id="tui-menu-view-btn" class="tui-menu-btn"><u>V</u>iew</button>
+            <button id="tui-menu-help-btn" class="tui-menu-btn"><u>H</u>elp</button>
+          </nav>
+        </div>
+        <div class="header-center">
+          <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.2</span></span>
+        </div>
+        <div class="header-right" style="display: flex; align-items: center; gap: 8px;">
+          <div id="nextcloud-status-indicator" class="nextcloud-status unlinked" title="Nextcloud: Not linked" style="cursor: pointer;">
+            <svg class="cloud-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+            <span class="status-dot"></span>
+          </div>
+          <button id="nextcloud-sync-btn" class="icon-btn hidden" title="Sync Nextcloud Files">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="app-body">
+        <!-- ── Sidebar ─────────────────────────────────────────────── -->
+      <nav id="sidebar" class="glass-panel">
+        <div class="sidebar-tabs">
+          <button id="sidebar-tab-local" class="sidebar-tab active">Local</button>
+          <button id="sidebar-tab-nextcloud" class="sidebar-tab">☁ Nextcloud</button>
+        </div>
+        <div id="local-sidebar-container">
+          <div class="sidebar-header">
+            <h2>Local Files</h2>
+            <div class="sidebar-actions">
+              <button id="new-file-btn"  class="icon-btn" title="New File (Ctrl+N)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button id="open-file-btn" class="icon-btn" title="Open File (Ctrl+O)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
+              </button>
+              <button id="save-file-btn" class="icon-btn" title="Save File (Ctrl+S)">
+                <!-- Floppy disk: filled when dirty, outlined when clean -->
+                <svg id="save-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              </button>
+            </div>
+          </div>
+          <ul id="file-list">
+            <!-- Populated dynamically by main.js -->
+          </ul>
+        </div>
+        <div id="nextcloud-sidebar-container" class="hidden">
+          <div class="sidebar-header">
+            <h2>Nextcloud</h2>
+            <div class="sidebar-actions">
+              <button id="nc-new-file-btn" class="icon-btn" title="New Nextcloud Markdown File">📄+</button>
+              <button id="nc-new-folder-btn" class="icon-btn" title="New Nextcloud Folder">📁+</button>
+              <button id="nc-refresh-btn" class="icon-btn" title="Refresh Nextcloud Folder">🔄</button>
+            </div>
+          </div>
+          <div id="nc-path-breadcrumbs" class="nc-breadcrumbs">/</div>
+          <ul id="nc-file-list" class="nc-file-list">
+            <!-- Populated dynamically -->
+          </ul>
+        </div>
+      </nav>
+
+      <!-- ── Editor ──────────────────────────────────────────────── -->
+      <main id="editor-container">
+
+        <!-- Tab Bar -->
+        <div id="tab-bar" class="glass-panel"></div>
+
+        <!-- Toolbar -->
+        <header id="toolbar" class="glass-panel">
+
+          <!-- Undo / Redo -->
+          <div class="toolbar-group" id="history-group">
+            <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5.4 7.6 11 4 17 4a9 9 0 0 1 9 9"/></svg>
+            </button>
+            <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Y)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C18.6 7.6 13 4 7 4a9 9 0 0 0-9 9"/></svg>
+            </button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Format -->
+          <div class="toolbar-group" id="fmt-group">
+            <button id="bold-btn"   class="icon-btn fmt-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
+            <button id="italic-btn" class="icon-btn fmt-btn" title="Italic (Ctrl+I)"><em>I</em></button>
+            <button id="code-btn"   class="icon-btn fmt-btn" title="Code (Ctrl+K)"><span class="mono">{}</span></button>
+            <button id="highlight-btn" class="icon-btn fmt-btn" title="Highlight (Ctrl+H)"><mark style="background: var(--yellow, #ffe066); color: #282a36; padding: 0 3px; border-radius: 2px; font-weight: bold; font-style: normal;">H</mark></button>
+            <button id="sub-btn" class="icon-btn fmt-btn" title="Subscript (Ctrl+Shift+B)"><span style="font-size: 0.85rem; font-family: var(--font-sans);">X<sub style="font-size: 0.65em; vertical-align: -0.35em; font-weight: bold; color: var(--purple);">2</sub></span></button>
+            <button id="sup-btn" class="icon-btn fmt-btn" title="Superscript (Ctrl+Shift+P)"><span style="font-size: 0.85rem; font-family: var(--font-sans);">X<sup style="font-size: 0.65em; vertical-align: 0.45em; font-weight: bold; color: var(--purple);">2</sup></span></button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Headings H1–H6 -->
+          <div class="toolbar-group" id="heading-group">
+            <button id="h1-btn" class="icon-btn fmt-btn h-btn" title="Heading 1 (Ctrl+1)">H1</button>
+            <button id="h2-btn" class="icon-btn fmt-btn h-btn" title="Heading 2 (Ctrl+2)">H2</button>
+            <button id="h3-btn" class="icon-btn fmt-btn h-btn" title="Heading 3 (Ctrl+3)">H3</button>
+            <button id="h4-btn" class="icon-btn fmt-btn h-btn" title="Heading 4 (Ctrl+4)">H4</button>
+            <button id="h5-btn" class="icon-btn fmt-btn h-btn" title="Heading 5 (Ctrl+5)">H5</button>
+            <button id="h6-btn" class="icon-btn fmt-btn h-btn" title="Heading 6 (Ctrl+6)">H6</button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Lists -->
+          <div class="toolbar-group" id="list-group">
+            <button id="ul-btn" class="icon-btn fmt-btn" title="Unordered List">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button id="ol-btn" class="icon-btn fmt-btn" title="Ordered List">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><text x="1" y="8" font-size="7" fill="currentColor" stroke="none">1.</text><text x="1" y="14" font-size="7" fill="currentColor" stroke="none">2.</text><text x="1" y="20" font-size="7" fill="currentColor" stroke="none">3.</text></svg>
+            </button>
+            <button id="tasklist-btn" class="icon-btn fmt-btn" title="Task List (Ctrl+Shift+L)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
+            </button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Block elements -->
+          <div class="toolbar-group" id="block-group">
+            <button id="quote-btn" class="icon-btn fmt-btn" title="Blockquote (Ctrl+Q)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+            </button>
+            <button id="admonition-btn" class="icon-btn fmt-btn admonition-main-btn" title="Insert Admonition Callout (Ctrl+Shift+A)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="12" y1="9" x2="12.01" y2="9"/></svg>
+              <span class="btn-arrow">▾</span>
+            </button>
+            <button id="hr-btn" class="icon-btn fmt-btn" title="Horizontal Rule">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/></svg>
+            </button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Insert -->
+          <div class="toolbar-group" id="insert-group">
+            <button id="time-btn" class="icon-btn fmt-btn" title="Insert Time (Ctrl+Alt+T)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <button id="date-btn" class="icon-btn fmt-btn" title="Insert Date (Ctrl+Alt+D)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </button>
+            <button id="footnote-btn" class="icon-btn fmt-btn" title="Insert Footnote (Ctrl+Alt+F)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/><text x="12.5" y="6.5" font-size="7" fill="currentColor" stroke="none" font-weight="bold">¹</text></svg>
+            </button>
+            <button id="link-btn" class="icon-btn fmt-btn" title="Insert Link (Ctrl+L)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <!-- Table Group -->
+          <div class="toolbar-group" id="table-group">
+            <!-- Main Table Dropdown Button -->
+            <button id="table-btn" class="icon-btn fmt-btn table-main-btn" title="Insert or Edit Table">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+              <span class="btn-arrow">▾</span>
+            </button>
+
+            <!-- Column Manipulation Buttons -->
+            <button id="table-col-before-btn" class="icon-btn fmt-btn" title="Add Column to Front (Left)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="1"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="10" y1="6" x2="14" y2="6"/></svg>
+            </button>
+            <button id="table-col-after-btn" class="icon-btn fmt-btn" title="Add Column After (Right)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="10" rx="1"/><line x1="12" y1="16" x2="12" y2="20"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+            </button>
+            <button id="table-col-del-btn" class="icon-btn fmt-btn danger-hover" title="Remove Current Column">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="10" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            </button>
+
+            <div class="toolbar-subsep"></div>
+
+            <!-- Row Manipulation Buttons -->
+            <button id="table-row-before-btn" class="icon-btn fmt-btn" title="Add Row Before (Above)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="4" width="10" height="16" rx="1"/><line x1="4" y1="12" x2="8" y2="12"/><line x1="6" y1="10" x2="6" y2="14"/></svg>
+            </button>
+            <button id="table-row-after-btn" class="icon-btn fmt-btn" title="Add Row After (Below)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="10" height="16" rx="1"/><line x1="16" y1="12" x2="20" y2="12"/><line x1="18" y1="10" x2="18" y2="14"/></svg>
+            </button>
+            <button id="table-row-del-btn" class="icon-btn fmt-btn danger-hover" title="Remove Current Row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="4" width="10" height="16" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+            </button>
+
+            <div class="toolbar-subsep"></div>
+
+            <!-- Column Alignment Buttons -->
+            <button id="table-align-left-btn" class="icon-btn fmt-btn" title="Align Column Left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+            </button>
+            <button id="table-align-center-btn" class="icon-btn fmt-btn" title="Align Column Center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+            </button>
+            <button id="table-align-right-btn" class="icon-btn fmt-btn" title="Align Column Right">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="toolbar-spacer"></div>
+
+          <div class="toolbar-group mode-segmented-group" id="mode-segmented-group">
+            <button id="mode-writer-btn" class="mode-tab-btn active" title="Writer Mode (Live Formatted View)">✏ Writer</button>
+            <button id="mode-markdown-btn" class="mode-tab-btn" title="Markdown Mode (Raw Syntax)">M↓ Markdown</button>
+            <button id="mode-split-btn" class="mode-tab-btn" title="Split View Mode (Antigravity Markdown View)">⚡ Split View</button>
+          </div>
+        </header>
+
+        <!-- Editor area -->
+        <div id="editor-area" class="writer-active">
+          <textarea id="markdown-input" class="hidden" placeholder="Start writing here…" spellcheck="true"></textarea>
+          <div id="writer-view" contenteditable="true" spellcheck="true"></div>
+        </div>
+
+        <!-- Footnote Fold-up Drawer -->
+        <div id="footnote-drawer" class="glass-panel footnote-drawer hidden">
+          <div class="footnote-drawer-header">
+            <div class="footnote-drawer-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/></svg>
+              <span>Footnotes</span>
+              <span id="footnote-count-badge" class="footnote-count-badge">0</span>
+            </div>
+            <div class="footnote-drawer-actions">
+              <button id="add-footnote-btn" class="btn btn-sm primary-btn" title="Add new footnote">➕ Add Footnote</button>
+              <button id="close-footnote-drawer-btn" class="icon-btn" title="Close Footnotes Frame (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="footnote-list" class="footnote-list">
+            <!-- Footnote items populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Status bar -->
+        <footer id="status-bar" class="glass-panel">
+          <div class="status-left">
+            <span id="status-message">Ready</span>
+          </div>
+          <div class="status-right">
+            <span id="mode-indicator">Writer Mode</span>
+            <span id="word-count">0 words</span>
+            <span id="char-count">0 chars</span>
+          </div>
+        </footer>
+
+      </main>
+      </div> <!-- End app-body -->
+    </div> <!-- End app -->
+
+    <!-- TUI Dropdown Menus -->
+    <div id="tui-file-menu" class="dropdown-menu tui-dropdown hidden">
+      <button id="tui-file-new-btn" class="menu-item"><span>📄 New File</span><kbd>Ctrl+N</kbd></button>
+      <button id="tui-file-open-btn" class="menu-item"><span>📂 Open File…</span><kbd>Ctrl+O</kbd></button>
+      <button id="tui-file-save-btn" class="menu-item"><span>💾 Save File</span><kbd>Ctrl+S</kbd></button>
+      <button id="tui-file-save-as-btn" class="menu-item"><span>💾 Save As…</span><kbd>Ctrl+Shift+S</kbd></button>
+    </div>
+
+    <div id="tui-edit-menu" class="dropdown-menu tui-dropdown hidden">
+      <button id="tui-edit-undo-btn" class="menu-item"><span>↩ Undo</span><kbd>Ctrl+Z</kbd></button>
+      <button id="tui-edit-redo-btn" class="menu-item"><span>↪ Redo</span><kbd>Ctrl+Y</kbd></button>
+    </div>
+
+    <div id="tui-format-menu" class="dropdown-menu tui-dropdown hidden">
+      <div class="menu-header">Headings</div>
+      <button id="tui-fmt-h1" class="menu-item"><span>H1 Heading 1</span><kbd>Ctrl+1</kbd></button>
+      <button id="tui-fmt-h2" class="menu-item"><span>H2 Heading 2</span><kbd>Ctrl+2</kbd></button>
+      <button id="tui-fmt-h3" class="menu-item"><span>H3 Heading 3</span><kbd>Ctrl+3</kbd></button>
+      <hr class="modal-sep" />
+      <div class="menu-header">Styles</div>
+      <button id="tui-fmt-bold" class="menu-item"><span><b>B</b> Bold</span><kbd>Ctrl+B</kbd></button>
+      <button id="tui-fmt-italic" class="menu-item"><span><i>I</i> Italic</span><kbd>Ctrl+I</kbd></button>
+      <button id="tui-fmt-code" class="menu-item"><span><code>{}</code> Code</span><kbd>Ctrl+K</kbd></button>
+      <button id="tui-fmt-highlight" class="menu-item"><span><mark>H</mark> Highlight</span><kbd>Ctrl+H</kbd></button>
+      <button id="tui-fmt-sub" class="menu-item"><span>X₂ Subscript</span><kbd>Ctrl+Shift+B</kbd></button>
+      <button id="tui-fmt-sup" class="menu-item"><span>X² Superscript</span><kbd>Ctrl+Shift+P</kbd></button>
+      <button id="tui-fmt-link" class="menu-item"><span>🔗 Link</span><kbd>Ctrl+L</kbd></button>
+      <hr class="modal-sep" />
+      <div class="menu-header">Lists & Blocks</div>
+      <button id="tui-fmt-ul" class="menu-item"><span>• Bullet List</span></button>
+      <button id="tui-fmt-ol" class="menu-item"><span>1. Numbered List</span></button>
+      <button id="tui-fmt-task" class="menu-item"><span>☑ Task Checkbox</span><kbd>Ctrl+Shift+L</kbd></button>
+      <button id="tui-fmt-quote" class="menu-item"><span>“ Blockquote</span><kbd>Ctrl+Q</kbd></button>
+      <button id="tui-fmt-hr" class="menu-item"><span>― Horizontal Rule</span></button>
+    </div>
+
+    <div id="tui-view-menu" class="dropdown-menu tui-dropdown hidden">
+      <button id="tui-view-writer" class="menu-item"><span>✏ Writer Mode (Live Rich Text)</span></button>
+      <button id="tui-view-markdown" class="menu-item"><span>M↓ Markdown Mode (Raw Syntax)</span></button>
+      <button id="tui-view-split" class="menu-item"><span>⚡ Split View (Antigravity Mode)</span></button>
+      <hr class="modal-sep" />
+      <button id="tui-view-wordwrap" class="menu-item"><span><span id="wordwrap-check">✓</span> Word Wrap</span></button>
+    </div>
+
+
+
+    <div id="tui-help-menu" class="dropdown-menu tui-dropdown hidden">
+      <button id="tui-help-about" class="menu-item"><span>ℹ️ About ArtfulType Pro</span></button>
+    </div>
+
+    <!-- Main Dropdown Menu -->
+    <div id="main-menu" class="dropdown-menu hidden">
+      <button id="menu-about-btn" class="menu-item">About</button>
+      <button id="menu-prefs-btn" class="menu-item">Preferences</button>
+    </div>
+
+    <!-- Table Popover Dropdown -->
+    <div id="table-menu" class="dropdown-menu table-dropdown hidden">
+      <div class="table-popover-title">Insert Table</div>
+      <div id="table-grid-picker" class="table-grid-picker"></div>
+      <div id="table-grid-label" class="table-grid-label">3 × 3 Table</div>
+      <div class="table-custom-row">
+        <div class="table-input-group">
+          <label for="table-rows-input">Rows:</label>
+          <input type="number" id="table-rows-input" min="1" max="50" value="3" class="table-num-input" />
+        </div>
+        <div class="table-input-group">
+          <label for="table-cols-input">Cols:</label>
+          <input type="number" id="table-cols-input" min="1" max="50" value="3" class="table-num-input" />
+        </div>
+        <button id="table-insert-custom-btn" class="btn primary-btn btn-sm">Insert</button>
+      </div>
+      <hr class="modal-sep" style="margin: 0.5rem 0;" />
+      <div class="table-popover-title">Table Controls</div>
+      <div class="table-action-grid">
+        <button id="menu-table-col-before" class="menu-item flex-item"><span>➕ Col Left</span></button>
+        <button id="menu-table-col-after" class="menu-item flex-item"><span>➕ Col Right</span></button>
+        <button id="menu-table-col-del" class="menu-item flex-item danger-item"><span>🗑 Del Col</span></button>
+        <button id="menu-table-row-before" class="menu-item flex-item"><span>➕ Row Above</span></button>
+        <button id="menu-table-row-after" class="menu-item flex-item"><span>➕ Row Below</span></button>
+        <button id="menu-table-row-del" class="menu-item flex-item danger-item"><span>🗑 Del Row</span></button>
+        <button id="menu-table-align-left" class="menu-item flex-item"><span>⯇ Align Left</span></button>
+        <button id="menu-table-align-center" class="menu-item flex-item"><span>⯂ Center</span></button>
+        <button id="menu-table-align-right" class="menu-item flex-item"><span>⯈ Align Right</span></button>
+      </div>
+    </div>
+
+    <!-- Admonition Popover Dropdown -->
+    <div id="admonition-menu" class="dropdown-menu admonition-dropdown hidden">
+      <div class="table-popover-title">Insert Admonition</div>
+      <div class="admonition-picker-grid">
+        <button class="menu-item admonition-type-btn" data-type="note">
+          <span class="adm-icon">ℹ️</span> <span>Note</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="tip">
+          <span class="adm-icon">💡</span> <span>Tip</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="important">
+          <span class="adm-icon">⚡</span> <span>Important</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="warning">
+          <span class="adm-icon">⚠️</span> <span>Warning</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="caution">
+          <span class="adm-icon">🛑</span> <span>Caution</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="success">
+          <span class="adm-icon">✅</span> <span>Success</span>
+        </button>
+        <button class="menu-item admonition-type-btn" data-type="bug">
+          <span class="adm-icon">🐛</span> <span>Bug</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- About Modal -->
+    <dialog id="about-modal" class="modal-dialog glass-panel">
+      <div class="modal-content">
+        <h2>About ArtfulType Pro</h2>
+        <p class="version-text">Version 0.30.2</p>
+        <hr class="modal-sep" />
+        <p><strong>License:</strong> GPLv3</p>
+        <p><strong>Maintainer:</strong> Roland Huber</p>
+        <p><strong>Original Creator:</strong> Sean Malseed (Action Retro)</p>
+        <div class="modal-actions">
+          <button id="close-about-btn" class="btn primary-btn">Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Preferences Modal -->
+    <dialog id="prefs-modal" class="modal-dialog glass-panel">
+      <div class="modal-content">
+        <h2>Preferences</h2>
+        <hr class="modal-sep" />
+        
+        <div class="pref-row">
+          <label for="theme-select">Theme:</label>
+          <select id="theme-select" class="pref-select">
+            <option value="dracula">Dracula (Standard)</option>
+            <option value="calm-rs">Calm (SchemeColor)</option>
+            <option value="classic-mac">Classic Mac</option>
+            <option value="win98">Windows 98</option>
+            <option value="solaris-cde">Solaris CDE</option>
+            <option value="beos">BeOS</option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <label for="autosave-select">Auto-save interval:</label>
+          <select id="autosave-select" class="pref-select">
+            <option value="0">Off</option>
+            <option value="1">1 minute</option>
+            <option value="2">2 minutes</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+
+        <hr class="modal-sep" />
+        <h3 style="margin: 8px 0 6px 0; font-size: 0.9rem; color: var(--purple, #bd93f9); display: flex; align-items: center; gap: 6px;">
+          <span>☁ Nextcloud Integration</span>
+        </h3>
+        
+        <div class="pref-row">
+          <label for="nc-server-url">Server Base URL:</label>
+          <input type="text" id="nc-server-url" class="pref-select" style="max-width: none; flex: 1;" placeholder="https://cloud.example.com" />
+        </div>
+
+        <div class="pref-row">
+          <label for="nc-username">Username:</label>
+          <input type="text" id="nc-username" class="pref-select" style="max-width: none; flex: 1;" placeholder="username" />
+        </div>
+
+        <div class="pref-row">
+          <label for="nc-password">App Password / Token:</label>
+          <input type="password" id="nc-password" class="pref-select" style="max-width: none; flex: 1;" placeholder="••••••••••••" />
+        </div>
+
+        <div class="pref-row" style="margin-top: 8px; justify-content: space-between; align-items: center;">
+          <span id="nc-status-badge" class="nc-badge unlinked">Disconnected</span>
+          <div style="display: flex; gap: 6px;">
+            <button id="nc-test-btn" class="btn btn-sm">Test</button>
+            <button id="nc-save-btn" class="btn btn-sm primary-btn">Link Account</button>
+            <button id="nc-unlink-btn" class="btn btn-sm danger-btn hidden">Unlink</button>
+          </div>
+        </div>
+        <p id="nc-msg" style="font-size: 0.8rem; color: var(--comment); margin-top: 6px; word-break: break-all; display: none;"></p>
+
+        <div class="modal-actions" style="margin-top: 14px;">
+          <button id="close-prefs-btn" class="btn primary-btn">Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Rename Modal -->
+    <dialog id="rename-modal" class="modal-dialog glass-panel">
+      <div class="modal-content">
+        <h2>Rename File</h2>
+        <hr class="modal-sep" />
+        <p style="font-size: 0.85rem; color: var(--comment); margin-bottom: 10px; word-break: break-all;" id="rename-file-path"></p>
+        <div class="pref-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+          <label for="rename-input">New filename (including extension):</label>
+          <input type="text" id="rename-input" class="pref-select" style="width: 100%; max-width: none;" />
+        </div>
+        <div class="modal-actions">
+          <button id="cancel-rename-btn" class="btn">Cancel</button>
+          <button id="confirm-rename-btn" class="btn primary-btn">Rename</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Unsaved Changes Modal -->
+    <dialog id="unsaved-modal" class="modal-dialog glass-panel">
+      <div class="modal-content">
+        <h2>Unsaved Changes</h2>
+        <hr class="modal-sep" />
+        <p id="unsaved-modal-msg" style="font-size: 0.9rem; word-break: break-all;"></p>
+        <p style="font-size: 0.8rem; color: var(--comment);">Your changes will be lost if you don't save them.</p>
+        <div class="modal-actions" style="gap: 8px;">
+          <button id="unsaved-cancel-btn" class="btn">Cancel</button>
+          <button id="unsaved-discard-btn" class="btn danger-btn">Discard</button>
+          <button id="unsaved-save-btn" class="btn primary-btn">Save</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Generic Confirm Modal -->
+    <dialog id="confirm-modal" class="modal-dialog glass-panel">
+      <div class="modal-content">
+        <h2 id="confirm-modal-title">Confirm Action</h2>
+        <hr class="modal-sep" />
+        <p id="confirm-modal-msg" style="font-size: 0.9rem; word-break: break-all;"></p>
+        <div class="modal-actions" style="gap: 8px;">
+          <button id="confirm-modal-cancel-btn" class="btn">Cancel</button>
+          <button id="confirm-modal-ok-btn" class="btn danger-btn">Confirm</button>
+        </div>
+      </div>
+    </dialog>
+
+  </body>
+</html>
