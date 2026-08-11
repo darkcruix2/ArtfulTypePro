@@ -292,7 +292,8 @@ fn is_code_file_extension(path_or_name: &str) -> bool {
         "rs" | "py" | "c" | "h" | "cpp" | "hpp" | "cc" | "hh" | "cxx" | "hxx" | "js" | "ts"
         | "jsx" | "tsx" | "go" | "java" | "sh" | "bash" | "zsh" | "json" | "yaml" | "yml"
         | "toml" | "sql" | "css" | "html" | "htm" | "xml" | "cmake" | "make" | "pde" | "php"
-        | "rb" | "kt" | "kts" | "swift" | "scala" | "cs" | "fs" | "elm" | "ex" | "exs" | "clj" => true,
+        | "rb" | "kt" | "kts" | "swift" | "scala" | "cs" | "fs" | "elm" | "ex" | "exs" | "clj"
+        | "ps1" | "psm1" | "psd1" | "pwsh" | "powershell" => true,
         _ => lower.ends_with("makefile") || lower.ends_with("cmakelists.txt") || lower.ends_with("dockerfile"),
     }
 }
@@ -1364,6 +1365,17 @@ fn copy_to_system_clipboard(text: &str) {
     let b64 = BASE64_STANDARD.encode(text);
     print!("\x1B]52;c;{}\x07", b64);
     let _ = std::io::stdout().flush();
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::{Command, Stdio};
+        if let Ok(mut child) = Command::new("clip.exe").stdin(Stdio::piped()).spawn() {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = child.wait();
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1464,6 +1476,9 @@ fn run_app<B: ratatui::backend::Backend>(
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
+                if key.kind == event::KeyEventKind::Release {
+                    continue;
+                }
                 // Compute inner height: full height minus menubar(1) + statusbar(1) + borders(2).
                 let ts = terminal.size()?;
                 let inner_h = ts.height.saturating_sub(4) as usize;
@@ -2902,10 +2917,10 @@ fn tokenize_code_line(line: &str, colors: &ThemeColors) -> Vec<Span<'static>> {
     let keywords = [
         "fn", "fun", "function", "def", "let", "mut", "const", "var", "val",
         "pub", "private", "protected", "struct", "class", "enum", "trait", "impl", "interface", "type", "typedef",
-        "if", "else", "match", "switch", "case", "default", "for", "while", "loop", "in", "do", "return", "yield", "goto",
-        "import", "from", "use", "include", "define", "pragma", "require", "package", "namespace", "as", "using",
+        "if", "else", "elseif", "match", "switch", "case", "default", "for", "foreach", "while", "loop", "in", "do", "until", "return", "yield", "goto",
+        "import", "from", "use", "include", "define", "pragma", "require", "package", "namespace", "as", "using", "param", "process", "begin", "end", "filter", "workflow", "configuration",
         "true", "false", "null", "none", "nil", "some", "ok", "err", "True", "False", "None",
-        "try", "catch", "finally", "throw", "async", "await", "break", "continue", "static", "self", "this", "super",
+        "try", "catch", "finally", "throw", "trap", "async", "await", "break", "continue", "static", "self", "this", "super",
         "select", "from", "where", "insert", "into", "update", "delete", "create", "table", "drop", "alter", "join", "on",
     ];
 
@@ -2960,15 +2975,47 @@ fn tokenize_code_line(line: &str, colors: &ThemeColors) -> Vec<Span<'static>> {
             continue;
         }
 
-        if c.is_alphanumeric() || c == '_' || c == '$' {
+        // PowerShell variables starting with $ (e.g. $var, $PSScriptRoot, $_, $true, $false, $null)
+        if c == '$' {
             let start = i;
-            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '$') {
+            i += 1;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == ':' || chars[i] == '$' || chars[i] == '?') {
+                i += 1;
+            }
+            let var_str: String = chars[start..i].iter().collect();
+            let var_lower = var_str.to_lowercase();
+            let style = if var_lower == "$true" || var_lower == "$false" || var_lower == "$null" {
+                Style::default().fg(colors.accent).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(colors.header)
+            };
+            spans.push(Span::styled(var_str, style));
+            continue;
+        }
+
+        // PowerShell / CLI parameters & operators starting with - (e.g. -Path, -Force, -eq, -match)
+        if c == '-' && i + 1 < len && (chars[i + 1].is_alphabetic() || chars[i + 1] == '_') && (i == 0 || chars[i - 1].is_whitespace() || chars[i - 1] == '(' || chars[i - 1] == '|' || chars[i - 1] == '{' || chars[i - 1] == ';') {
+            let start = i;
+            i += 1;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '-') {
+                i += 1;
+            }
+            let param_str: String = chars[start..i].iter().collect();
+            spans.push(Span::styled(param_str, Style::default().fg(colors.accent)));
+            continue;
+        }
+
+        // Identifiers & Cmdlets (including hyphenated Cmdlets like Get-ChildItem, Write-Host)
+        if c.is_alphanumeric() || c == '_' {
+            let start = i;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_' || (chars[i] == '-' && i + 1 < len && chars[i + 1].is_alphabetic())) {
                 i += 1;
             }
             let word: String = chars[start..i].iter().collect();
-            let is_kw = keywords.contains(&word.to_lowercase().as_str());
-            let is_type = types.contains(&word.as_str()) || (word.chars().next().map_or(false, |f| f.is_uppercase()) && !is_kw);
-            let is_fn = i < len && chars[i] == '(';
+            let word_lower = word.to_lowercase();
+            let is_kw = keywords.contains(&word_lower.as_str());
+            let is_type = types.contains(&word.as_str()) || (word.chars().next().map_or(false, |f| f.is_uppercase()) && !is_kw && !word.contains('-'));
+            let is_fn = (i < len && chars[i] == '(') || word.contains('-');
 
             let style = if is_kw {
                 Style::default().fg(colors.header).add_modifier(Modifier::BOLD)

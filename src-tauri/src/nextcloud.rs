@@ -33,6 +33,16 @@ fn dirs_next() -> Option<PathBuf> {
         let _ = fs::create_dir_all(&p);
         return Some(p);
     }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        let p = PathBuf::from(profile).join(".config").join("artfultype");
+        let _ = fs::create_dir_all(&p);
+        return Some(p);
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let p = PathBuf::from(appdata).join("artfultype");
+        let _ = fs::create_dir_all(&p);
+        return Some(p);
+    }
     None
 }
 

@@ -47,17 +47,9 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 
 - **Four View Modes**: Writer (styled preview), Markdown (raw editor), Split (side-by-side preview & editor), Pure Text / Code Mode (`F5` / `-t`)
 - **Toggleable Syntax Highlighting**: `F6` or `Ctrl+H` enables/disables real-time syntax highlighting with status bar indication (`[SYNTAX: ON/OFF]`)
-- **Auto-Detection**: Automatically launches in Pure Text / Code Mode when opening code files (`.rs`, `.py`, `.c`, `.cpp`, `.js`, `.ts`, `.go`, `.java`, `.sh`, `.json`, `.sql`, etc.)
-- **Coding Productivity**:
-  - `Tab` / `Shift+Tab`: Indent / Unindent selection or line
-  - `Enter`: Smart auto-indentation (carries leading whitespace & expands on `{`, `:`, `(`, `[`)
-  - `Ctrl+D`: Duplicate line or selection
-  - `Alt+Up` / `Alt+Down`: Move current line UP or DOWN
-  - `(` `[` `{` `"` `'` `` ` ``: Wrap selected text in matching delimiters
-- **Selection Mode**: Hold `Shift` + arrow keys to select text in any direction
-- **Clipboard Integration**: `Ctrl+C` / `Ctrl+X` / `Ctrl+V`
-- **VT100 / ASCII Mode** (`--vt100`): Pure ASCII borders for legacy or restricted terminals
-- **Menu Bar**: `Option+Cmd+F/E/O/V/T/H` (or `Alt+F/E/O/V/T/H`) or arrow keys to navigate menus
+- **Auto-Detection**: Automatically launches in Pure Text / Code Mode when opening code files (`.ps1`, `.psm1`, `.psd1`, `.pwsh`, `.rs`, `.py`, `.c`, `.cpp`, `.js`, `.ts`, `.go`, `.java`, `.sh`, `.json`, `.sql`, etc.)
+- **PowerShell Syntax Highlighting**: Full syntax highlighting support for PowerShell scripts, cmdlets (`Get-ChildItem`, `Write-Host`), variables (`$PSScriptRoot`, `$_`, `$true`), parameters (`-Path`, `-Force`), and operators (`-eq`, `-match`).
+- **Windows Terminal Integration**: Native Windows console support (`artfultype-cli-windows-x64.exe` / `art.exe`) running smoothly inside Windows Terminal, PowerShell, CMD, or Git Bash with system clipboard sync (`clip.exe` / OSC 52).
 
 ### CLI Keyboard Shortcuts
 
@@ -100,7 +92,8 @@ Pre-compiled release binaries and packages are available in the `releases/` dire
 
 ### Windows (x64)
 - **GUI Installer**: [releases/artfultype-rs_0.30.2_x64-setup.exe](releases/artfultype-rs_0.30.2_x64-setup.exe)
-- **Portable Executable**: [releases/artfultype-rs-windows-x64.exe](releases/artfultype-rs-windows-x64.exe)
+- **Portable GUI Executable**: [releases/artfultype-rs-windows-x64.exe](releases/artfultype-rs-windows-x64.exe)
+- **CLI Executable (`art.exe`)**: [releases/artfultype-cli-windows-x64.exe](releases/artfultype-cli-windows-x64.exe)
 
 ### Linux (AMD64)
 - **AppImage**: [releases/artfultype-rs_0.30.2_amd64.AppImage](releases/artfultype-rs_0.30.2_amd64.AppImage)
