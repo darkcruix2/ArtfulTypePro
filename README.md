@@ -25,6 +25,9 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 **Linux & macOS Terminal — Split View**
 ![art TUI — Split view showing Markdown editor and Writer preview side by side](screenshots/artfultype-cli-split.png)
 
+**Windows Terminal (PowerShell)**
+![art TUI running in Windows Terminal / PowerShell showing the File menu](screenshots/artfultype-cli-windows.png)
+
 ---
 
 ## Features
