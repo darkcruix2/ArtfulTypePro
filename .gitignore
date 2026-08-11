@@ -17,7 +17,13 @@ target/
 **/target/
 src-tauri/target/
 
-# Editor directories and files
+# Python cache
+__pycache__/
+*.pyc
+
+# Tauri generated schemas
+src-tauri/gen/
+
 .vscode/*
 !.vscode/extensions.json
 .idea
