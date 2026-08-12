@@ -102,7 +102,7 @@ Pre-compiled release binaries and packages are available in the `releases/` dire
 
 ### Linux (AMD64)
 
-- **AppImage (compressed)**: [releases/artfultype-rs_0.30.3_amd64.AppImage.xz](releases/artfultype-rs_0.30.3_amd64.AppImage.xz)
+- **AppImage (compressed 7z)**: [releases/artfultype-rs_0.30.3_amd64.AppImage.7z](releases/artfultype-rs_0.30.3_amd64.AppImage.7z)
 - **Debian Package (`.deb`)**: [releases/artfultype-rs_0.30.3_amd64.deb](releases/artfultype-rs_0.30.3_amd64.deb)
 - **RPM Package (`.rpm`)**: [releases/artfultype-rs-0.30.3-1.x86_64.rpm](releases/artfultype-rs-0.30.3-1.x86_64.rpm)
 - **CLI Debian Package (`.deb`)**: [releases/artfultype-cli_0.30.3-1_amd64.deb](releases/artfultype-cli_0.30.3-1_amd64.deb)

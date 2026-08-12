@@ -627,7 +627,10 @@ function nodeToMd(node, insideBlock = false) {
       return `*${inner}*`;
     }
     case "del": case "s": return `~~${children(true)}~~`;
-    case "mark": return `==${children(true)}==`;
+    case "mark": {
+      if (node.classList.contains("find-match")) return children(true);
+      return `==${children(true)}==`;
+    }
     case "code": {
       if (node.parentElement?.tagName.toLowerCase() === "pre") return node.textContent;
       // If the code content itself contains backticks, use double backticks as delimiter
@@ -3376,6 +3379,17 @@ async function closeTab(id) {
 }
 
 function getCurrentMarkdown() {
+  if (!isMarkdownMode && writerViewEl) {
+    const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
+    for (const m of marks) {
+      const parent = m.parentNode;
+      if (parent) {
+        while (m.firstChild) parent.insertBefore(m.firstChild, m);
+        parent.removeChild(m);
+        parent.normalize();
+      }
+    }
+  }
   return isMarkdownMode ? markdownInputEl.value : htmlToMarkdown(writerViewEl);
 }
 
@@ -3691,6 +3705,9 @@ function newFile() {
 
 // ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
 function handleKeydown(e) {
+  if (e.target && (e.target.id === "find-input" || e.target.id === "replace-input")) {
+    return;
+  }
   const mod = isPrimaryMod(e);
 
   if (!isMarkdownMode && e.key === "Enter" && !e.shiftKey && !mod) {
@@ -4793,7 +4810,7 @@ function clearFindHighlights() {
   if (counter) counter.textContent = "0 of 0";
 
   if (!isMarkdownMode && writerViewEl) {
-    const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
+    const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match, mark"));
     for (const m of marks) {
       const parent = m.parentNode;
       if (parent) {
@@ -4871,6 +4888,7 @@ function performFind() {
 
 function findMatchesInWriter(regex) {
   if (!writerViewEl) return [];
+
   const textNodes = [];
   const walk = document.createTreeWalker(writerViewEl, NodeFilter.SHOW_TEXT, null);
   let n;
@@ -4879,55 +4897,51 @@ function findMatchesInWriter(regex) {
     textNodes.push(n);
   }
 
-  let fullText = "";
-  const nodeMap = [];
-  for (const node of textNodes) {
-    const start = fullText.length;
-    fullText += node.nodeValue;
-    const end = fullText.length;
-    nodeMap.push({ node, start, end });
-  }
-
   const matches = [];
-  let match;
-  while ((match = regex.exec(fullText)) !== null) {
-    matches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      text: match[0]
-    });
-    if (regex.lastIndex === match.index) {
-      regex.lastIndex++;
-    }
-  }
 
-  for (let i = matches.length - 1; i >= 0; i--) {
-    const m = matches[i];
-    let startNode = null, startOff = 0, endNode = null, endOff = 0;
-    for (const item of nodeMap) {
-      if (!startNode && m.start >= item.start && m.start <= item.end) {
-        startNode = item.node;
-        startOff = m.start - item.start;
-      }
-      if (!endNode && m.end >= item.start && m.end <= item.end) {
-        endNode = item.node;
-        endOff = m.end - item.start;
-        break;
+  for (const node of textNodes) {
+    const text = node.nodeValue;
+    if (!text) continue;
+
+    regex.lastIndex = 0;
+    const nodeMatches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      nodeMatches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0]
+      });
+      if (regex.lastIndex === match.index) {
+        regex.lastIndex++;
       }
     }
-    if (startNode && endNode) {
+
+    if (nodeMatches.length === 0) continue;
+
+    let currentTextNode = node;
+    for (let i = nodeMatches.length - 1; i >= 0; i--) {
+      const m = nodeMatches[i];
       try {
-        const range = document.createRange();
-        range.setStart(startNode, startOff);
-        range.setEnd(endNode, endOff);
+        const afterStartNode = currentTextNode.splitText(m.start);
+        const afterMatchNode = afterStartNode.splitText(m.end - m.start);
+
         const mark = document.createElement("mark");
         mark.className = "find-match";
-        mark.dataset.matchIndex = String(i);
-        range.surroundContents(mark);
-        m.markEl = mark;
+        afterStartNode.parentNode.replaceChild(mark, afterStartNode);
+        mark.appendChild(afterStartNode);
+
+        matches.unshift({
+          text: m.text,
+          markEl: mark
+        });
       } catch (_) {}
     }
   }
+
+  matches.forEach((m, idx) => {
+    if (m.markEl) m.markEl.dataset.matchIndex = String(idx);
+  });
 
   return matches;
 }
@@ -4998,6 +5012,7 @@ async function replaceCurrent() {
   const replaceText = replaceInput ? replaceInput.value : "";
   const match = findMatches[currentMatchIndex];
 
+  clearFindHighlights();
   const fullText = getCurrentMarkdown();
   const updatedText = fullText.slice(0, match.start) + replaceText + fullText.slice(match.end);
 
@@ -5016,6 +5031,7 @@ async function replaceAll() {
   const regex = buildFindRegex(query);
   if (!regex) return;
 
+  clearFindHighlights();
   const fullText = getCurrentMarkdown();
   let count = 0;
   const updatedText = fullText.replace(regex, () => {
@@ -5030,7 +5046,7 @@ async function replaceAll() {
   } else {
     statusMessageEl.textContent = "No occurrences found to replace.";
   }
-  performFind();
+  clearFindHighlights();
 }
 
 async function applyDocumentText(text) {
@@ -5057,6 +5073,23 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         if (e.shiftKey) findPrevious();
         else findNext();
+      } else if (e.key === "Tab" || e.keyCode === 9 || e.code === "Tab") {
+        if (!e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          const subRow = document.getElementById("find-replace-row-sub");
+          if (subRow) {
+            subRow.classList.remove("hidden");
+            isReplaceVisible = true;
+          }
+          const replaceInput = document.getElementById("replace-input");
+          if (replaceInput) {
+            setTimeout(() => {
+              replaceInput.focus();
+              replaceInput.select();
+            }, 0);
+          }
+        }
       } else if (e.key === "Escape") {
         closeFindReplaceBar();
       }
@@ -5069,6 +5102,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "Enter") {
         e.preventDefault();
         replaceCurrent();
+      } else if (e.key === "Tab" || e.keyCode === 9 || e.code === "Tab") {
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          const findInput = document.getElementById("find-input");
+          if (findInput) {
+            setTimeout(() => {
+              findInput.focus();
+              findInput.select();
+            }, 0);
+          }
+        }
       } else if (e.key === "Escape") {
         closeFindReplaceBar();
       }
