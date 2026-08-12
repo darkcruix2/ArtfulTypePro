@@ -4989,7 +4989,7 @@ function highlightWriterMatches() {
   }
 }
 
-function replaceCurrent() {
+async function replaceCurrent() {
   if (findMatches.length === 0 || currentMatchIndex < 0) {
     performFind();
     if (findMatches.length === 0) return;
@@ -5001,12 +5001,12 @@ function replaceCurrent() {
   const fullText = getCurrentMarkdown();
   const updatedText = fullText.slice(0, match.start) + replaceText + fullText.slice(match.end);
 
-  applyDocumentText(updatedText);
+  await applyDocumentText(updatedText);
   setDirty(true);
   performFind();
 }
 
-function replaceAll() {
+async function replaceAll() {
   const findInput = document.getElementById("find-input");
   const replaceInput = document.getElementById("replace-input");
   if (!findInput || !findInput.value) return;
@@ -5024,7 +5024,7 @@ function replaceAll() {
   });
 
   if (count > 0) {
-    applyDocumentText(updatedText);
+    await applyDocumentText(updatedText);
     setDirty(true);
     statusMessageEl.textContent = `Replaced ${count} occurrence(s).`;
   } else {
@@ -5033,7 +5033,7 @@ function replaceAll() {
   performFind();
 }
 
-function applyDocumentText(text) {
+async function applyDocumentText(text) {
   const f = getActiveFile();
   if (f) f.content = text;
   if (isMarkdownMode) {
@@ -5042,7 +5042,7 @@ function applyDocumentText(text) {
       updateStats(text);
     }
   } else {
-    renderMarkdownToWriter(text);
+    await renderMarkdownToWriter(text);
     updateStats(text);
   }
 }
