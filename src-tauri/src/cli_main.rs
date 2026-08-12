@@ -280,6 +280,7 @@ struct App {
     is_nextcloud_file: bool,
     nextcloud_remote_path: Option<String>,
     nextcloud_config: Option<artfultype_rs_lib::nextcloud::NextcloudConfig>,
+    is_welcome_screen: bool,
 }
 
 fn is_code_file_extension(path_or_name: &str) -> bool {
@@ -306,6 +307,7 @@ impl App {
     ) -> App {
         let mut content = String::new();
         let mut file_name = "untitled.md".to_string();
+        let mut is_welcome_screen = false;
 
         if let Some(ref path) = file_path {
             let p = PathBuf::from(path);
@@ -315,9 +317,8 @@ impl App {
                     file_name = n.to_string_lossy().to_string();
                 }
             }
-        }
-
-        if content.is_empty() {
+        } else {
+            is_welcome_screen = true;
             content = "# Welcome to art TUI\n\n\
                        A distraction-free Markdown Writer & TUI Editor.\n\n\
                        ## Features\n\n\
@@ -382,7 +383,21 @@ impl App {
             is_nextcloud_file: false,
             nextcloud_remote_path: None,
             nextcloud_config: nc_cfg,
+            is_welcome_screen,
         }
+    }
+
+    fn clear_welcome(&mut self) {
+        self.is_welcome_screen = false;
+        self.content = String::new();
+        self.cursor_line = 0;
+        self.cursor_col = 0;
+        self.scroll_top = 0;
+        self.scroll_left = 0;
+        self.selection_anchor = None;
+        self.history = vec![String::new()];
+        self.history_index = 0;
+        self.dirty = false;
     }
 
     fn record_nextcloud_recent(&mut self, remote_path: &str, display_name: &str) {
@@ -1115,6 +1130,7 @@ impl App {
     fn execute_action(&mut self, action: MenuAction, inner_height: usize) {
         match action {
             MenuAction::NewFile => {
+                self.is_welcome_screen = false;
                 self.content = String::new();
                 self.file_path = None;
                 self.file_name = "untitled.md".to_string();
@@ -1478,6 +1494,9 @@ fn run_app<B: ratatui::backend::Backend>(
             if let Event::Key(key) = event::read()? {
                 if key.kind == event::KeyEventKind::Release {
                     continue;
+                }
+                if app.is_welcome_screen {
+                    app.clear_welcome();
                 }
                 // Compute inner height: full height minus menubar(1) + statusbar(1) + borders(2).
                 let ts = terminal.size()?;
@@ -2011,6 +2030,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                         } else {
                                             let file_path = std::path::PathBuf::from(&current_dir).join(name);
                                             if let Ok(content) = std::fs::read_to_string(&file_path) {
+                                                app.is_welcome_screen = false;
                                                 app.content = content;
                                                 app.file_path = Some(file_path.to_string_lossy().to_string());
                                                 app.file_name = name.clone();
