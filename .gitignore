@@ -33,3 +33,6 @@ src-tauri/gen/
 *.njsproj
 *.sln
 *.sw?
+
+# Ignore raw uncompressed AppImages over 100MB
+*.AppImage

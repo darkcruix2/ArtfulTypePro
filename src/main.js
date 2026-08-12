@@ -4840,18 +4840,22 @@ function performFind() {
     return;
   }
 
-  const text = getCurrentMarkdown();
-  let match;
-  findMatches = [];
-  while ((match = regex.exec(text)) !== null) {
-    findMatches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      text: match[0]
-    });
-    if (regex.lastIndex === match.index) {
-      regex.lastIndex++;
+  if (isMarkdownMode) {
+    const text = markdownInputEl ? markdownInputEl.value : "";
+    let match;
+    findMatches = [];
+    while ((match = regex.exec(text)) !== null) {
+      findMatches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0]
+      });
+      if (regex.lastIndex === match.index) {
+        regex.lastIndex++;
+      }
     }
+  } else {
+    findMatches = findMatchesInWriter(regex);
   }
 
   if (findMatches.length === 0) {
@@ -4863,6 +4867,69 @@ function performFind() {
   currentMatchIndex = 0;
   counter.textContent = `1 of ${findMatches.length}`;
   highlightCurrentMatch();
+}
+
+function findMatchesInWriter(regex) {
+  if (!writerViewEl) return [];
+  const textNodes = [];
+  const walk = document.createTreeWalker(writerViewEl, NodeFilter.SHOW_TEXT, null);
+  let n;
+  while (n = walk.nextNode()) {
+    if (n.parentNode && n.parentNode.nodeName === "MARK" && n.parentNode.classList.contains("find-match")) continue;
+    textNodes.push(n);
+  }
+
+  let fullText = "";
+  const nodeMap = [];
+  for (const node of textNodes) {
+    const start = fullText.length;
+    fullText += node.nodeValue;
+    const end = fullText.length;
+    nodeMap.push({ node, start, end });
+  }
+
+  const matches = [];
+  let match;
+  while ((match = regex.exec(fullText)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      text: match[0]
+    });
+    if (regex.lastIndex === match.index) {
+      regex.lastIndex++;
+    }
+  }
+
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const m = matches[i];
+    let startNode = null, startOff = 0, endNode = null, endOff = 0;
+    for (const item of nodeMap) {
+      if (!startNode && m.start >= item.start && m.start <= item.end) {
+        startNode = item.node;
+        startOff = m.start - item.start;
+      }
+      if (!endNode && m.end >= item.start && m.end <= item.end) {
+        endNode = item.node;
+        endOff = m.end - item.start;
+        break;
+      }
+    }
+    if (startNode && endNode) {
+      try {
+        const range = document.createRange();
+        range.setStart(startNode, startOff);
+        range.setEnd(endNode, endOff);
+        const mark = document.createElement("mark");
+        mark.className = "find-match";
+        mark.dataset.matchIndex = String(i);
+        range.surroundContents(mark);
+        m.markEl = mark;
+      } catch (_) {}
+    }
+  }
+
+  return matches;
 }
 
 function findNext() {
@@ -4905,52 +4972,20 @@ function highlightCurrentMatch() {
 
 function highlightWriterMatches() {
   if (!writerViewEl) return;
-  const existingMarks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
-  for (const m of existingMarks) {
-    const parent = m.parentNode;
-    if (parent) {
-      while (m.firstChild) parent.insertBefore(m.firstChild, m);
-      parent.removeChild(m);
-      parent.normalize();
-    }
-  }
+  const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
+  marks.forEach(m => m.classList.remove("current-match"));
 
   if (findMatches.length === 0 || currentMatchIndex < 0) return;
   const targetMatch = findMatches[currentMatchIndex];
-
-  const textNodes = [];
-  const walk = document.createTreeWalker(writerViewEl, NodeFilter.SHOW_TEXT, null);
-  let n;
-  while (n = walk.nextNode()) { textNodes.push(n); }
-
-  let currentPos = 0;
-  let startNode = null, startOffset = 0, endNode = null, endOffset = 0;
-
-  for (const node of textNodes) {
-    const len = node.nodeValue.length;
-    if (!startNode && currentPos + len >= targetMatch.start) {
-      startNode = node;
-      startOffset = targetMatch.start - currentPos;
-    }
-    if (!endNode && currentPos + len >= targetMatch.end) {
-      endNode = node;
-      endOffset = targetMatch.end - currentPos;
-      break;
-    }
-    currentPos += len;
-  }
-
-  if (startNode && endNode) {
-    try {
-      const range = document.createRange();
-      range.setStart(startNode, Math.min(startOffset, startNode.nodeValue.length));
-      range.setEnd(endNode, Math.min(endOffset, endNode.nodeValue.length));
-
-      const mark = document.createElement("mark");
-      mark.className = "find-match current-match";
-      range.surroundContents(mark);
+  if (targetMatch && targetMatch.markEl) {
+    targetMatch.markEl.classList.add("current-match");
+    targetMatch.markEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  } else {
+    const mark = writerViewEl.querySelector(`mark.find-match[data-match-index="${currentMatchIndex}"]`);
+    if (mark) {
+      mark.classList.add("current-match");
       mark.scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (_) {}
+    }
   }
 }
 
