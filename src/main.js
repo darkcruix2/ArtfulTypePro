@@ -345,8 +345,17 @@ function renderFileList() {
 }
 
 async function openRecentFile(item) {
+  if (!isTextFile(item.name) && !isImageFile(item.name)) {
+    statusMessageEl.textContent = `Cannot open "${item.name}": Not a text file.`;
+    alert(`Cannot open "${item.name}": ArtfulType Pro only opens text files.`);
+    return;
+  }
   try {
     statusMessageEl.textContent = `Opening ${item.name}…`;
+    if (isImageFile(item.name)) {
+      await applyOpenedFile({ path: item.path, name: item.name, content: "" });
+      return;
+    }
     const fileData = await invoke("read_file", { path: item.path });
     await applyOpenedFile(fileData);
     statusMessageEl.textContent = `Opened: ${fileData.name}`;
@@ -357,11 +366,46 @@ async function openRecentFile(item) {
   }
 }
 
-// ─── Image Helpers ────────────────────────────────────────────────────────────
+// ─── File Validation & Image Helpers ──────────────────────────────────────────
+const TEXT_FILE_EXTENSIONS = new Set([
+  "md", "markdown", "txt", "text", "org", "rst", "log",
+  "json", "json5", "yaml", "yml", "xml", "html", "htm", "css", "scss", "less",
+  "js", "mjs", "cjs", "ts", "tsx", "jsx", "rs", "py", "c", "h", "cpp", "hpp", "cc", "cs",
+  "go", "java", "kt", "sh", "bash", "zsh", "fish", "ini", "cfg", "conf", "toml", "env",
+  "csv", "tsv", "tex", "sql", "patch", "diff", "properties", "gitignore", "dockerfile", "makefile"
+]);
+
+const IMAGE_FILE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"
+]);
+
+function getFileExtension(pathOrName) {
+  if (!pathOrName) return "";
+  const name = pathOrName.split(/[/\\]/).pop();
+  if (name.startsWith(".") && !name.slice(1).includes(".")) return name.slice(1).toLowerCase();
+  const parts = name.split(".");
+  if (parts.length <= 1) return "";
+  return parts.pop().toLowerCase();
+}
+
+function isTextFile(pathOrName) {
+  if (!pathOrName) return true;
+  const ext = getFileExtension(pathOrName);
+  if (!ext) return true;
+  return TEXT_FILE_EXTENSIONS.has(ext);
+}
+
+function isImageFile(pathOrName) {
+  if (!pathOrName) return false;
+  const ext = getFileExtension(pathOrName);
+  return IMAGE_FILE_EXTENSIONS.has(ext);
+}
+
 function isLocalPath(src) {
   if (!src) return false;
   return !/^(https?:|data:|blob:|asset:|tauri:)/i.test(src);
 }
+
 function normalizePath(path) {
   const parts = path.split("/");
   const out = [];
@@ -371,13 +415,66 @@ function normalizePath(path) {
   }
   return out.join("/");
 }
+
 function resolveToAbsolute(src) {
   if (!isLocalPath(src)) return null;
   if (src.startsWith("/")) return normalizePath(src);
   if (getCurrentFileDir()) return normalizePath(getCurrentFileDir().replace(/\\/g, "/") + "/" + src);
   return null;
 }
+
+function resolveNextcloudImagePath(src, docRemotePath) {
+  if (!src) return null;
+  let cleanSrc = src.trim();
+  if (cleanSrc.includes("/remote.php/dav/files/")) {
+    const idx = cleanSrc.indexOf("/remote.php/dav/files/");
+    const afterFiles = cleanSrc.slice(idx + 22);
+    const firstSlash = afterFiles.indexOf("/");
+    if (firstSlash !== -1) {
+      return normalizePath(afterFiles.slice(firstSlash + 1));
+    }
+  }
+  if (cleanSrc.startsWith("/")) {
+    return normalizePath(cleanSrc.slice(1));
+  }
+  if (docRemotePath) {
+    const docDir = docRemotePath.includes("/") ? docRemotePath.replace(/\/[^/]+$/, "") : "";
+    const combined = docDir ? `${docDir}/${cleanSrc}` : cleanSrc;
+    return normalizePath(combined);
+  }
+  return normalizePath(cleanSrc);
+}
+
 async function loadLocalImage(img, src) {
+  const active = getActiveFile();
+  if (active && active.isNextcloud) {
+    const ncPath = resolveNextcloudImagePath(src, active.remotePath);
+    if (ncPath) {
+      try {
+        const dataUrl = await invoke("read_nextcloud_image_base64", { path: ncPath });
+        img.setAttribute("src", dataUrl);
+        return;
+      } catch (err) {
+        console.warn(`Nextcloud image not found: ${ncPath}`, err);
+        img.setAttribute("alt", (img.getAttribute("alt") || "") + " [Nextcloud image not found]");
+        return;
+      }
+    }
+  }
+
+  if (src && (src.includes("/remote.php/dav/files/") || src.startsWith("webdav://"))) {
+    const ncPath = resolveNextcloudImagePath(src, null);
+    if (ncPath) {
+      try {
+        const dataUrl = await invoke("read_nextcloud_image_base64", { path: ncPath });
+        img.setAttribute("src", dataUrl);
+        return;
+      } catch (err) {
+        console.warn(`Nextcloud image not found: ${ncPath}`, err);
+      }
+    }
+  }
+
   const absPath = resolveToAbsolute(src);
   if (!absPath) return;
   try {
@@ -388,11 +485,12 @@ async function loadLocalImage(img, src) {
     img.setAttribute("alt", (img.getAttribute("alt") || "") + " [not found]");
   }
 }
+
 async function fixImageSrcs(el) {
   const imgs = Array.from(el.querySelectorAll("img"));
   await Promise.all(imgs.map(async (img) => {
     const src = img.getAttribute("src");
-    if (!src || !isLocalPath(src)) return;
+    if (!src) return;
     img.dataset.originalSrc = src;
     await loadLocalImage(img, src);
   }));
@@ -3027,18 +3125,62 @@ function syncActiveFileContent() {
   if (f) f.content = getCurrentMarkdown();
 }
 
+function renderImageViewer(fileObj) {
+  if (!fileObj || !fileObj.isImage) return;
+  writerViewEl.classList.add("hidden");
+  markdownInputEl.classList.add("hidden");
+
+  let viewer = document.getElementById("image-viewer-container");
+  if (!viewer) {
+    viewer = document.createElement("div");
+    viewer.id = "image-viewer-container";
+    viewer.className = "image-viewer-container";
+    document.getElementById("editor-area").appendChild(viewer);
+  }
+  viewer.classList.remove("hidden");
+  viewer.replaceChildren();
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "image-viewer-wrapper";
+
+  const img = document.createElement("img");
+  img.className = "image-viewer-img";
+  img.src = fileObj.dataUrl;
+  img.alt = fileObj.name;
+
+  const meta = document.createElement("div");
+  meta.className = "image-viewer-meta";
+  meta.textContent = `🖼 ${fileObj.name} — Image Viewer`;
+
+  wrapper.appendChild(img);
+  wrapper.appendChild(meta);
+  viewer.appendChild(wrapper);
+}
+
 async function switchTab(id) {
   if (activeFileId === id) return;
   syncActiveFileContent();
   activeFileId = id;
   const f = getActiveFile();
+  const imgViewer = document.getElementById("image-viewer-container");
+
   if (f) {
-    if (isMarkdownMode) {
-       markdownInputEl.value = f.content;
-       updateStats(f.content);
+    if (f.isImage) {
+      renderImageViewer(f);
+      statusMessageEl.textContent = `Viewing Image: ${f.name}`;
     } else {
-       await renderMarkdownToWriter(f.content);
-       updateStats(f.content);
+      if (imgViewer) imgViewer.classList.add("hidden");
+      if (isMarkdownMode) {
+        writerViewEl.classList.add("hidden");
+        markdownInputEl.classList.remove("hidden");
+        markdownInputEl.value = f.content || "";
+        updateStats(f.content || "");
+      } else {
+        markdownInputEl.classList.add("hidden");
+        writerViewEl.classList.remove("hidden");
+        await renderMarkdownToWriter(f.content || "");
+        updateStats(f.content || "");
+      }
     }
     const btn = document.getElementById("save-file-btn");
     if (btn) {
@@ -3051,6 +3193,7 @@ async function switchTab(id) {
   }
   renderTabBar();
   renderFileList();
+  if (typeof performFind === "function") performFind();
 }
 
 function promptUnsavedChanges(file) {
@@ -3237,18 +3380,55 @@ function getCurrentMarkdown() {
 }
 
 async function applyOpenedFile(fileData) {
+  if (!fileData || !fileData.path) return;
+  const name = fileData.name || fileData.path.split(/[/\\]/).pop();
+
+  if (!isTextFile(name) && !isImageFile(name)) {
+    statusMessageEl.textContent = `Cannot open "${name}": Not a text file.`;
+    alert(`Cannot open "${name}": ArtfulType Pro only opens text files.`);
+    return;
+  }
+
   const existing = openFiles.find(f => f.path === fileData.path);
   if (existing) {
-     await switchTab(existing.id);
-     return;
+    await switchTab(existing.id);
+    return;
   }
+
   syncActiveFileContent();
+
+  if (isImageFile(name)) {
+    try {
+      const dataUrl = await invoke("read_image_base64", { path: fileData.path });
+      const imgFile = {
+        id: fileData.path,
+        path: fileData.path,
+        name: name,
+        isImage: true,
+        dataUrl: dataUrl,
+        content: "",
+        dirty: false
+      };
+      openFiles.push(imgFile);
+      activeFileId = imgFile.id;
+      addToRecentFiles(fileData.path, name);
+      renderTabBar();
+      renderFileList();
+      await switchTab(imgFile.id);
+      return;
+    } catch (e) {
+      console.error(e);
+      statusMessageEl.textContent = `Error reading image: ${name}`;
+      return;
+    }
+  }
+
   const newFile = {
-     id: fileData.path,
-     path: fileData.path,
-     name: fileData.name,
-     content: fileData.content,
-     dirty: false
+    id: fileData.path,
+    path: fileData.path,
+    name: name,
+    content: fileData.content,
+    dirty: false
   };
   openFiles.push(newFile);
   activeFileId = newFile.id;
@@ -3256,7 +3436,7 @@ async function applyOpenedFile(fileData) {
   markdownInputEl.value = fileData.content;
   markdownInputEl.disabled = false;
   writerViewEl.contentEditable = "true";
-  addToRecentFiles(fileData.path, fileData.name);
+  addToRecentFiles(fileData.path, name);
   if (isMarkdownMode) {
     updateStats(fileData.content);
   } else {
@@ -3654,10 +3834,11 @@ function handleKeydown(e) {
       case "o": e.preventDefault(); openFile();          return;
       case "n": e.preventDefault(); newFile();           return;
       case "w": e.preventDefault(); if (activeFileId) closeTab(activeFileId); return;
-      case "m": e.preventDefault(); toggleMode();        return;
+      case "f": e.preventDefault(); toggleFindReplaceBar(false); return;
+      case "h": e.preventDefault(); toggleFindReplaceBar(true);  return;
+      case "r": e.preventDefault(); toggleFindReplaceBar(true);  return;
       case "b": e.preventDefault(); applyRichFormat("bold",   "**"); return;
       case "i": e.preventDefault(); applyRichFormat("italic", "*");  return;
-      case "h": e.preventDefault(); applyHighlight();    return;
       case "k": e.preventDefault(); applyCode();         return;
       case "l": e.preventDefault(); applyLink();         return;
       case "q": e.preventDefault(); applyBlockquote();   return;
@@ -3670,12 +3851,23 @@ function handleKeydown(e) {
     }
   }
   if (mod && e.altKey) {
-    if (e.key === "f" || e.key === "F") { e.preventDefault(); applyFootnote(); return; }
+    if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFindReplaceBar(false); return; }
+    if (e.key === "h" || e.key === "H") { e.preventDefault(); applyHighlight(); return; }
     if (e.key === "t" || e.key === "T") { e.preventDefault(); insertAtCursor(formatTime(new Date())); return; }
     if (e.key === "d" || e.key === "D") { e.preventDefault(); insertAtCursor(formatDate(new Date())); return; }
   }
   if (mod && e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();
+    if (k === "f") {
+      e.preventDefault();
+      toggleFindReplaceBar(true);
+      return;
+    }
+    if (k === "h") {
+      e.preventDefault();
+      replaceAll();
+      return;
+    }
     if (k === "b") {
       e.preventDefault();
       applySubscript();
@@ -3699,6 +3891,7 @@ function handleKeydown(e) {
   }
   if (e.key === "Escape") {
     closeFootnoteDrawer();
+    closeFindReplaceBar();
   }
 }
 
@@ -4338,7 +4531,7 @@ function renderNextcloudFileList() {
 
     const labelSpan = document.createElement("span");
     labelSpan.className = "nc-file-label";
-    const icon = item.is_dir ? "📁" : "📄";
+    const icon = item.is_dir ? "📁" : (isImageFile(item.name) ? "🖼" : "📄");
     labelSpan.textContent = `${icon} ${item.name}`;
 
     const actionsDiv = document.createElement("div");
@@ -4370,6 +4563,13 @@ function renderNextcloudFileList() {
 }
 
 async function openNextcloudFile(item) {
+  if (!isTextFile(item.name) && !isImageFile(item.name)) {
+    statusMessageEl.textContent = `Cannot open "${item.name}": Nextcloud file is not a text file.`;
+    updateNextcloudUI("linked", `Cannot open non-text file: ${item.name}`);
+    alert(`Cannot open "${item.name}": ArtfulType Pro only opens text files.`);
+    return;
+  }
+
   const existing = openFiles.find(f => f.isNextcloud && f.remotePath === item.path);
   if (existing) {
     switchTab(existing.id);
@@ -4379,8 +4579,32 @@ async function openNextcloudFile(item) {
   statusMessageEl.textContent = `Downloading ${item.name} from Nextcloud…`;
   updateNextcloudUI("syncing", `Downloading ${item.name}...`);
   try {
-    const content = await invoke("read_nextcloud_file", { path: item.path });
     const tabId = "nc:" + item.path;
+
+    if (isImageFile(item.name)) {
+      const dataUrl = await invoke("read_nextcloud_image_base64", { path: item.path });
+      const imgObj = {
+        id: tabId,
+        name: `☁ ${item.name}`,
+        path: null,
+        isNextcloud: true,
+        remotePath: item.path,
+        remoteName: item.name,
+        isImage: true,
+        dataUrl: dataUrl,
+        content: "",
+        dirty: false,
+      };
+      openFiles.push(imgObj);
+      switchTab(tabId);
+      recordNcRecentFile(item.path, item.name);
+      statusMessageEl.textContent = `Opened Nextcloud image: ${item.name}`;
+      updateNextcloudUI("linked", `Linked to ${ncConfig.server_url}`);
+      renderNextcloudFileList();
+      return;
+    }
+
+    const content = await invoke("read_nextcloud_file", { path: item.path });
     const fileObj = {
       id: tabId,
       name: `☁ ${item.name}`,
@@ -4518,5 +4742,344 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const ncRefreshBtn = document.getElementById("nc-refresh-btn");
   if (ncRefreshBtn) ncRefreshBtn.addEventListener("click", () => fetchNextcloudFolder(ncCurrentPath));
+});
+
+// ─── Find & Replace Engine ──────────────────────────────────────────────────
+let findMatches = [];
+let currentMatchIndex = -1;
+let isReplaceVisible = false;
+let findOptions = { matchCase: false, wholeWord: false, useRegex: false };
+
+function toggleFindReplaceBar(showReplace) {
+  const bar = document.getElementById("find-replace-bar");
+  const subRow = document.getElementById("find-replace-row-sub");
+  if (!bar) return;
+
+  if (showReplace !== undefined) {
+    bar.classList.remove("hidden");
+    if (showReplace) {
+      if (subRow) subRow.classList.remove("hidden");
+      isReplaceVisible = true;
+      document.getElementById("replace-input")?.focus();
+    } else {
+      if (subRow) subRow.classList.add("hidden");
+      isReplaceVisible = false;
+      document.getElementById("find-input")?.focus();
+    }
+  } else {
+    bar.classList.toggle("hidden");
+    if (!bar.classList.contains("hidden")) {
+      document.getElementById("find-input")?.focus();
+    }
+  }
+  performFind();
+}
+
+function closeFindReplaceBar() {
+  const bar = document.getElementById("find-replace-bar");
+  if (bar) bar.classList.add("hidden");
+  clearFindHighlights();
+  if (isMarkdownMode) {
+    markdownInputEl?.focus();
+  } else {
+    writerViewEl?.focus();
+  }
+}
+
+function clearFindHighlights() {
+  findMatches = [];
+  currentMatchIndex = -1;
+  const counter = document.getElementById("find-counter");
+  if (counter) counter.textContent = "0 of 0";
+
+  if (!isMarkdownMode && writerViewEl) {
+    const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
+    for (const m of marks) {
+      const parent = m.parentNode;
+      if (parent) {
+        while (m.firstChild) parent.insertBefore(m.firstChild, m);
+        parent.removeChild(m);
+        parent.normalize();
+      }
+    }
+  }
+}
+
+function buildFindRegex(query) {
+  if (!query) return null;
+  let pattern = query;
+  if (!findOptions.useRegex) {
+    pattern = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  if (findOptions.wholeWord) {
+    pattern = `\\b${pattern}\\b`;
+  }
+  const flags = findOptions.matchCase ? "g" : "gi";
+  try {
+    return new RegExp(pattern, flags);
+  } catch (_) {
+    return null;
+  }
+}
+
+function performFind() {
+  const input = document.getElementById("find-input");
+  const counter = document.getElementById("find-counter");
+  if (!input || !counter) return;
+
+  const query = input.value;
+  clearFindHighlights();
+  if (!query) return;
+
+  const active = getActiveFile();
+  if (!active || active.isImage) return;
+
+  const regex = buildFindRegex(query);
+  if (!regex) {
+    counter.textContent = "Invalid regex";
+    return;
+  }
+
+  const text = getCurrentMarkdown();
+  let match;
+  findMatches = [];
+  while ((match = regex.exec(text)) !== null) {
+    findMatches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      text: match[0]
+    });
+    if (regex.lastIndex === match.index) {
+      regex.lastIndex++;
+    }
+  }
+
+  if (findMatches.length === 0) {
+    counter.textContent = "0 of 0";
+    currentMatchIndex = -1;
+    return;
+  }
+
+  currentMatchIndex = 0;
+  counter.textContent = `1 of ${findMatches.length}`;
+  highlightCurrentMatch();
+}
+
+function findNext() {
+  if (findMatches.length === 0) {
+    performFind();
+    return;
+  }
+  currentMatchIndex = (currentMatchIndex + 1) % findMatches.length;
+  const counter = document.getElementById("find-counter");
+  if (counter) counter.textContent = `${currentMatchIndex + 1} of ${findMatches.length}`;
+  highlightCurrentMatch();
+}
+
+function findPrevious() {
+  if (findMatches.length === 0) {
+    performFind();
+    return;
+  }
+  currentMatchIndex = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
+  const counter = document.getElementById("find-counter");
+  if (counter) counter.textContent = `${currentMatchIndex + 1} of ${findMatches.length}`;
+  highlightCurrentMatch();
+}
+
+function highlightCurrentMatch() {
+  if (currentMatchIndex < 0 || currentMatchIndex >= findMatches.length) return;
+  const match = findMatches[currentMatchIndex];
+
+  if (isMarkdownMode && markdownInputEl) {
+    markdownInputEl.focus();
+    markdownInputEl.setSelectionRange(match.start, match.end);
+    const fullText = markdownInputEl.value;
+    const linesBefore = fullText.slice(0, match.start).split("\n").length;
+    const lineHeight = 20;
+    markdownInputEl.scrollTop = (linesBefore - 3) * lineHeight;
+  } else {
+    highlightWriterMatches();
+  }
+}
+
+function highlightWriterMatches() {
+  if (!writerViewEl) return;
+  const existingMarks = Array.from(writerViewEl.querySelectorAll("mark.find-match"));
+  for (const m of existingMarks) {
+    const parent = m.parentNode;
+    if (parent) {
+      while (m.firstChild) parent.insertBefore(m.firstChild, m);
+      parent.removeChild(m);
+      parent.normalize();
+    }
+  }
+
+  if (findMatches.length === 0 || currentMatchIndex < 0) return;
+  const targetMatch = findMatches[currentMatchIndex];
+
+  const textNodes = [];
+  const walk = document.createTreeWalker(writerViewEl, NodeFilter.SHOW_TEXT, null);
+  let n;
+  while (n = walk.nextNode()) { textNodes.push(n); }
+
+  let currentPos = 0;
+  let startNode = null, startOffset = 0, endNode = null, endOffset = 0;
+
+  for (const node of textNodes) {
+    const len = node.nodeValue.length;
+    if (!startNode && currentPos + len >= targetMatch.start) {
+      startNode = node;
+      startOffset = targetMatch.start - currentPos;
+    }
+    if (!endNode && currentPos + len >= targetMatch.end) {
+      endNode = node;
+      endOffset = targetMatch.end - currentPos;
+      break;
+    }
+    currentPos += len;
+  }
+
+  if (startNode && endNode) {
+    try {
+      const range = document.createRange();
+      range.setStart(startNode, Math.min(startOffset, startNode.nodeValue.length));
+      range.setEnd(endNode, Math.min(endOffset, endNode.nodeValue.length));
+
+      const mark = document.createElement("mark");
+      mark.className = "find-match current-match";
+      range.surroundContents(mark);
+      mark.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (_) {}
+  }
+}
+
+function replaceCurrent() {
+  if (findMatches.length === 0 || currentMatchIndex < 0) {
+    performFind();
+    if (findMatches.length === 0) return;
+  }
+  const replaceInput = document.getElementById("replace-input");
+  const replaceText = replaceInput ? replaceInput.value : "";
+  const match = findMatches[currentMatchIndex];
+
+  const fullText = getCurrentMarkdown();
+  const updatedText = fullText.slice(0, match.start) + replaceText + fullText.slice(match.end);
+
+  applyDocumentText(updatedText);
+  setDirty(true);
+  performFind();
+}
+
+function replaceAll() {
+  const findInput = document.getElementById("find-input");
+  const replaceInput = document.getElementById("replace-input");
+  if (!findInput || !findInput.value) return;
+
+  const query = findInput.value;
+  const replaceText = replaceInput ? replaceInput.value : "";
+  const regex = buildFindRegex(query);
+  if (!regex) return;
+
+  const fullText = getCurrentMarkdown();
+  let count = 0;
+  const updatedText = fullText.replace(regex, () => {
+    count++;
+    return replaceText;
+  });
+
+  if (count > 0) {
+    applyDocumentText(updatedText);
+    setDirty(true);
+    statusMessageEl.textContent = `Replaced ${count} occurrence(s).`;
+  } else {
+    statusMessageEl.textContent = "No occurrences found to replace.";
+  }
+  performFind();
+}
+
+function applyDocumentText(text) {
+  const f = getActiveFile();
+  if (f) f.content = text;
+  if (isMarkdownMode) {
+    if (markdownInputEl) {
+      markdownInputEl.value = text;
+      updateStats(text);
+    }
+  } else {
+    renderMarkdownToWriter(text);
+    updateStats(text);
+  }
+}
+
+// ─── Bind Find & Replace Listeners ───────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const findInput = document.getElementById("find-input");
+  if (findInput) {
+    findInput.addEventListener("input", performFind);
+    findInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (e.shiftKey) findPrevious();
+        else findNext();
+      } else if (e.key === "Escape") {
+        closeFindReplaceBar();
+      }
+    });
+  }
+
+  const replaceInput = document.getElementById("replace-input");
+  if (replaceInput) {
+    replaceInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        replaceCurrent();
+      } else if (e.key === "Escape") {
+        closeFindReplaceBar();
+      }
+    });
+  }
+
+  document.getElementById("find-prev-btn")?.addEventListener("click", findPrevious);
+  document.getElementById("find-next-btn")?.addEventListener("click", findNext);
+
+  document.getElementById("find-opt-case")?.addEventListener("click", (e) => {
+    findOptions.matchCase = !findOptions.matchCase;
+    e.currentTarget.classList.toggle("active", findOptions.matchCase);
+    performFind();
+  });
+
+  document.getElementById("find-opt-word")?.addEventListener("click", (e) => {
+    findOptions.wholeWord = !findOptions.wholeWord;
+    e.currentTarget.classList.toggle("active", findOptions.wholeWord);
+    performFind();
+  });
+
+  document.getElementById("find-opt-regex")?.addEventListener("click", (e) => {
+    findOptions.useRegex = !findOptions.useRegex;
+    e.currentTarget.classList.toggle("active", findOptions.useRegex);
+    performFind();
+  });
+
+  document.getElementById("find-toggle-replace-btn")?.addEventListener("click", () => {
+    const subRow = document.getElementById("find-replace-row-sub");
+    if (subRow) {
+      subRow.classList.toggle("hidden");
+      isReplaceVisible = !subRow.classList.contains("hidden");
+      if (isReplaceVisible) document.getElementById("replace-input")?.focus();
+    }
+  });
+
+  document.getElementById("find-close-btn")?.addEventListener("click", closeFindReplaceBar);
+  document.getElementById("replace-btn")?.addEventListener("click", replaceCurrent);
+  document.getElementById("replace-all-btn")?.addEventListener("click", replaceAll);
+
+  // TUI Edit Menu Items
+  document.getElementById("tui-edit-find-btn")?.addEventListener("click", () => toggleFindReplaceBar(false));
+  document.getElementById("tui-edit-replace-btn")?.addEventListener("click", () => toggleFindReplaceBar(true));
+  document.getElementById("tui-edit-replace-all-btn")?.addEventListener("click", () => {
+    toggleFindReplaceBar(true);
+    replaceAll();
+  });
 });
 

@@ -386,6 +386,42 @@ pub fn read_file(config: &NextcloudConfig, relative_path: &str) -> Result<String
     res.text().map_err(|e| format!("Failed to read file content: {e}"))
 }
 
+pub fn read_image_base64(config: &NextcloudConfig, relative_path: &str) -> Result<String, String> {
+    let client = create_webdav_client()?;
+    let url = build_webdav_url(config, relative_path);
+
+    let res = client
+        .get(&url)
+        .basic_auth(&config.username, Some(&config.password))
+        .send()
+        .map_err(|e| format!("Failed to fetch remote image: {e}"))?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP error {} reading image {}", res.status(), relative_path));
+    }
+
+    let bytes = res.bytes().map_err(|e| format!("Failed to read image bytes: {e}"))?;
+    let ext = std::path::Path::new(relative_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png"  => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif"  => "image/gif",
+        "webp" => "image/webp",
+        "svg"  => "image/svg+xml",
+        "bmp"  => "image/bmp",
+        "ico"  => "image/x-icon",
+        "avif" => "image/avif",
+        _      => "application/octet-stream",
+    };
+    use base64::Engine as _;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
 pub fn write_file(config: &NextcloudConfig, relative_path: &str, content: &str) -> Result<(), String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);

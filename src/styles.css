@@ -2860,3 +2860,170 @@ dialog:not([open]),
   list-style: none;
 }
 
+/* ── Find & Replace Panel ─────────────────────────────────────────────────── */
+.find-replace-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--glass-bg, rgba(40, 42, 54, 0.95));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 90;
+  transition: all 0.2s ease;
+}
+
+.find-replace-bar.hidden {
+  display: none !important;
+}
+
+.find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.find-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.find-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--comment, #6272a4);
+  pointer-events: none;
+}
+
+.find-input-wrapper input {
+  width: 100%;
+  padding: 5px 65px 5px 30px;
+  background: var(--bg-sidebar, #21222c);
+  color: var(--fg, #f8f8f2);
+  border: 1px solid var(--border, rgba(98, 114, 164, 0.4));
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.find-input-wrapper input:focus {
+  border-color: var(--purple, #bd93f9);
+  box-shadow: 0 0 0 2px rgba(189, 147, 249, 0.25);
+}
+
+.find-counter {
+  position: absolute;
+  right: 10px;
+  font-size: 0.75rem;
+  color: var(--comment, #6272a4);
+  font-weight: 500;
+  pointer-events: none;
+  user-select: none;
+}
+
+.find-nav-buttons,
+.find-options,
+.replace-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.find-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.find-opt-btn {
+  padding: 3px 7px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: bold;
+  background: var(--bg-sidebar, #21222c);
+  color: var(--comment, #6272a4);
+  border: 1px solid var(--border, rgba(98, 114, 164, 0.3));
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.find-opt-btn:hover {
+  color: var(--fg, #f8f8f2);
+  border-color: var(--purple, #bd93f9);
+}
+
+.find-opt-btn.active {
+  background: var(--purple, #bd93f9);
+  color: var(--bg, #282a36);
+  border-color: var(--purple, #bd93f9);
+}
+
+/* Find Match Highlight in Writer View */
+mark.find-match {
+  background: rgba(241, 250, 140, 0.45);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(241, 250, 140, 0.6);
+  padding: 0 1px;
+}
+
+mark.find-match.current-match {
+  background: #ff79c6;
+  color: #282a36;
+  font-weight: bold;
+  box-shadow: 0 0 0 2px #ff79c6, 0 0 8px rgba(255, 121, 198, 0.6);
+}
+
+/* Image Viewer Tab Styles */
+.image-viewer-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 2rem;
+  overflow: auto;
+  background: var(--bg, #282a36);
+  box-sizing: border-box;
+}
+
+.image-viewer-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.image-viewer-img {
+  max-width: 100%;
+  max-height: calc(100vh - 200px);
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: repeating-conic-gradient(#1e1f29 0% 25%, #282a36 0% 50%) 50% / 16px 16px;
+}
+
+.image-viewer-meta {
+  margin-top: 1rem;
+  font-size: 0.82rem;
+  color: var(--comment, #6272a4);
+  background: var(--bg-sidebar, #21222c);
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+

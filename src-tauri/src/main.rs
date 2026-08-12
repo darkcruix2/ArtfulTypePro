@@ -49,7 +49,9 @@ fn get_platform() -> &'static str {
 #[tauri::command]
 async fn open_file_dialog() -> Option<FileData> {
     let file = AsyncFileDialog::new()
-        .add_filter("Markdown", &["md", "markdown", "txt"])
+        .add_filter("Text & Markdown Files", &["md", "markdown", "txt", "text", "org", "rst", "log", "json", "yaml", "yml", "xml", "html", "css", "js", "ts", "rs", "py", "c", "h", "cpp", "sh", "ini", "cfg", "toml", "env", "csv", "tsv", "tex", "sql"])
+        .add_filter("Image Files", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"])
+        .add_filter("All Text Files", &["*"])
         .pick_file()
         .await;
 
@@ -230,6 +232,12 @@ fn read_nextcloud_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn read_nextcloud_image_base64(path: String) -> Result<String, String> {
+    let cfg = artfultype_rs_lib::nextcloud::load_config().ok_or_else(|| "Nextcloud is not linked".to_string())?;
+    artfultype_rs_lib::nextcloud::read_image_base64(&cfg, &path)
+}
+
+#[tauri::command]
 fn write_nextcloud_file(path: String, content: String) -> Result<(), String> {
     let cfg = artfultype_rs_lib::nextcloud::load_config().ok_or_else(|| "Nextcloud is not linked".to_string())?;
     artfultype_rs_lib::nextcloud::write_file(&cfg, &path, &content)
@@ -251,7 +259,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     for arg in &args[1..] {
         if arg == "-h" || arg == "--help" {
-            println!("ArtfulType Terminal / CLI WebKit Executable v0.30.2");
+            println!("ArtfulType Terminal / CLI WebKit Executable v0.30.3");
             println!("Usage: artfultype-rs [OPTIONS] [FILE]\n");
             println!("Options:");
             println!("  --mode <MODE>      Set initial view mode (writer | markdown | split)");
@@ -260,7 +268,7 @@ fn main() {
             println!("  -v, --version      Print version information");
             return;
         } else if arg == "-v" || arg == "--version" {
-            println!("ArtfulType Terminal / CLI WebKit Executable v0.30.2");
+            println!("ArtfulType Terminal / CLI WebKit Executable v0.30.3");
             return;
         }
     }
@@ -285,6 +293,7 @@ fn main() {
             test_nextcloud_connection,
             list_nextcloud_folder,
             read_nextcloud_file,
+            read_nextcloud_image_base64,
             write_nextcloud_file,
             delete_nextcloud_entry,
             create_nextcloud_folder,

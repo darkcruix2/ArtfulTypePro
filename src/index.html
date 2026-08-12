@@ -30,7 +30,7 @@
           </nav>
         </div>
         <div class="header-center">
-          <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.2</span></span>
+          <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.3</span></span>
         </div>
         <div class="header-right" style="display: flex; align-items: center; gap: 8px;">
           <div id="nextcloud-status-indicator" class="nextcloud-status unlinked" title="Nextcloud: Not linked" style="cursor: pointer;">
@@ -235,6 +235,37 @@
           </div>
         </header>
 
+        <!-- Find & Replace Floating Panel -->
+        <div id="find-replace-bar" class="glass-panel find-replace-bar hidden">
+          <div class="find-replace-row">
+            <div class="find-input-wrapper">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="find-search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="find-input" placeholder="Find text…" autocomplete="off" spellcheck="false" />
+              <span id="find-counter" class="find-counter">0 of 0</span>
+            </div>
+            <div class="find-nav-buttons">
+              <button id="find-prev-btn" class="icon-btn find-btn" title="Previous match (Shift+Enter)">▲</button>
+              <button id="find-next-btn" class="icon-btn find-btn" title="Next match (Enter)">▼</button>
+            </div>
+            <div class="find-options">
+              <button id="find-opt-case" class="find-opt-btn" title="Match Case (Alt+C)">Aa</button>
+              <button id="find-opt-word" class="find-opt-btn" title="Whole Word (Alt+W)">\b</button>
+              <button id="find-opt-regex" class="find-opt-btn" title="Use Regular Expression (Alt+R)">.*</button>
+            </div>
+            <button id="find-toggle-replace-btn" class="icon-btn find-btn" title="Toggle Replace Bar">⇄</button>
+            <button id="find-close-btn" class="icon-btn find-btn" title="Close Find Bar (Esc)">✕</button>
+          </div>
+          <div id="find-replace-row-sub" class="find-replace-row hidden">
+            <div class="find-input-wrapper">
+              <input type="text" id="replace-input" placeholder="Replace with…" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="replace-action-buttons">
+              <button id="replace-btn" class="btn btn-sm">Replace</button>
+              <button id="replace-all-btn" class="btn btn-sm primary-btn">Replace All</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Editor area -->
         <div id="editor-area" class="writer-active">
           <textarea id="markdown-input" class="hidden" placeholder="Start writing here…" spellcheck="true"></textarea>
@@ -288,6 +319,10 @@
     <div id="tui-edit-menu" class="dropdown-menu tui-dropdown hidden">
       <button id="tui-edit-undo-btn" class="menu-item"><span>↩ Undo</span><kbd>Ctrl+Z</kbd></button>
       <button id="tui-edit-redo-btn" class="menu-item"><span>↪ Redo</span><kbd>Ctrl+Y</kbd></button>
+      <hr class="modal-sep" />
+      <button id="tui-edit-find-btn" class="menu-item"><span>🔍 Find…</span><kbd>Ctrl+F</kbd></button>
+      <button id="tui-edit-replace-btn" class="menu-item"><span>⇄ Find & Replace…</span><kbd>Ctrl+H</kbd></button>
+      <button id="tui-edit-replace-all-btn" class="menu-item"><span>⚡ Replace All</span><kbd>Ctrl+Shift+H</kbd></button>
     </div>
 
     <div id="tui-format-menu" class="dropdown-menu tui-dropdown hidden">
@@ -396,7 +431,7 @@
     <dialog id="about-modal" class="modal-dialog glass-panel">
       <div class="modal-content">
         <h2>About ArtfulType Pro</h2>
-        <p class="version-text">Version 0.30.2</p>
+        <p class="version-text">Version 0.30.3</p>
         <hr class="modal-sep" />
         <p><strong>License:</strong> GPLv3</p>
         <p><strong>Maintainer:</strong> Roland Huber</p>

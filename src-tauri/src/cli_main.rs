@@ -1404,7 +1404,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while i < args.len() {
         let arg = &args[i];
         if arg == "-h" || arg == "--help" {
-            println!("art Terminal / TUI v0.30.2");
+            println!("art Terminal / TUI v0.30.3");
             println!("Usage: art [OPTIONS] [FILE]\n");
             println!("  -t, --text, --code Set initial mode to Pure Text / Code editor");
             println!("  --mode writer|markdown|split|pure-text|code");
@@ -1414,7 +1414,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  -v, --version      Version");
             return Ok(());
         } else if arg == "-v" || arg == "--version" {
-            println!("art Terminal / TUI v0.30.2");
+            println!("art Terminal / TUI v0.30.3");
             return Ok(());
         } else if arg == "--vt100" || arg == "--ascii" {
             initial_theme = Some(Theme::VT100);
@@ -2575,7 +2575,7 @@ fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 Style::default().fg(colors.fg)
             },
         ),
-        Span::styled("  | art v0.30.2", Style::default().fg(colors.muted)),
+        Span::styled("  | art v0.30.3", Style::default().fg(colors.muted)),
     ];
     f.render_widget(
         Paragraph::new(Line::from(menu_spans)).style(Style::default().bg(colors.border)),
@@ -2840,7 +2840,7 @@ fn render_popup(f: &mut ratatui::Frame, app: &App, colors: &ThemeColors) {
             (
                 " About art ",
                 vec![
-                    "art v0.30.2".to_string(),
+                    "art v0.30.3".to_string(),
                     "Distraction-free Markdown TUI Editor".to_string(),
                     "".to_string(),
                     "Maintainer:       Roland Huber".to_string(),
