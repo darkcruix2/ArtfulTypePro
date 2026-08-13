@@ -3833,11 +3833,14 @@ function handleKeydown(e) {
   if (mod && !e.altKey) {
     const k = e.key.toLowerCase();
     if (k === "z") {
-      if (!isMarkdownMode) { e.preventDefault(); document.execCommand(e.shiftKey ? "redo" : "undo"); }
+      e.preventDefault();
+      if (e.shiftKey) doRedo();
+      else doUndo();
       return;
     }
     if (k === "y") {
-      if (!isMarkdownMode) { e.preventDefault(); document.execCommand("redo"); }
+      e.preventDefault();
+      doRedo();
       return;
     }
   }
@@ -3912,14 +3915,86 @@ function handleKeydown(e) {
   }
 }
 
+function pushHistory(file, content) {
+  if (!file) file = getActiveFile();
+  if (!file) return;
+
+  if (content === undefined) {
+    content = isMarkdownMode ? (markdownInputEl ? markdownInputEl.value : "") : (writerViewEl ? htmlToMarkdown(writerViewEl) : "");
+  }
+
+  if (!file.history) {
+    file.history = [content];
+    file.historyIndex = 0;
+    return;
+  }
+
+  if (file.history[file.historyIndex] === content) return;
+
+  file.history = file.history.slice(0, file.historyIndex + 1);
+  file.history.push(content);
+
+  if (file.history.length > 100) {
+    file.history.shift();
+  }
+  file.historyIndex = file.history.length - 1;
+}
+
 // ─── Undo / Redo toolbar ──────────────────────────────────────────────────────
 function doUndo() {
-  if (!isMarkdownMode) { document.execCommand("undo"); writerViewEl.focus(); }
-  else markdownInputEl.focus();
+  if (!isMarkdownMode) {
+    writerViewEl?.focus();
+    document.execCommand("undo");
+    return;
+  }
+
+  const f = getActiveFile();
+  if (f && f.history && f.historyIndex > 0) {
+    f.historyIndex--;
+    const prevContent = f.history[f.historyIndex];
+    f.content = prevContent;
+    if (markdownInputEl) {
+      markdownInputEl.value = prevContent;
+      updateStats(prevContent);
+    }
+    setDirty(true);
+    if (typeof performFind === "function") performFind();
+    markdownInputEl?.focus();
+    return;
+  }
+
+  if (markdownInputEl) {
+    markdownInputEl.focus();
+    document.execCommand("undo");
+  }
 }
+
 function doRedo() {
-  if (!isMarkdownMode) { document.execCommand("redo"); writerViewEl.focus(); }
-  else markdownInputEl.focus();
+  if (!isMarkdownMode) {
+    writerViewEl?.focus();
+    document.execCommand("redo");
+    return;
+  }
+
+  const f = getActiveFile();
+  if (f && f.history && f.historyIndex < f.history.length - 1) {
+    f.historyIndex++;
+    const nextContent = f.history[f.historyIndex];
+    f.content = nextContent;
+    if (markdownInputEl) {
+      markdownInputEl.value = nextContent;
+      updateStats(nextContent);
+    }
+    setDirty(true);
+    if (typeof performFind === "function") performFind();
+    markdownInputEl?.focus();
+    return;
+  }
+
+  if (markdownInputEl) {
+    markdownInputEl.focus();
+    document.execCommand("redo");
+  }
 }
 
 // ─── Main Menu & Modals ───────────────────────────────────────────────────────
@@ -4185,6 +4260,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Synced scroll in Split View mode
   let isSyncingScroll = false;
   markdownInputEl.addEventListener("scroll", () => {
+    const backdrop = document.getElementById("markdown-backdrop");
+    if (backdrop) {
+      backdrop.scrollTop = markdownInputEl.scrollTop;
+      backdrop.scrollLeft = markdownInputEl.scrollLeft;
+    }
     if (currentViewMode === "split" && !isSyncingScroll) {
       isSyncingScroll = true;
       const ratio = markdownInputEl.scrollTop / (markdownInputEl.scrollHeight - markdownInputEl.clientHeight || 1);
@@ -4207,6 +4287,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       await renderMarkdownToWriter(markdownInputEl.value);
     }
   }, 100);
+  const debouncedPushHistory = debounce(() => {
+    pushHistory(getActiveFile(), markdownInputEl.value);
+  }, 300);
+  markdownInputEl.addEventListener("input", debouncedPushHistory);
   markdownInputEl.addEventListener("input", debouncedSplitUpdate);
 
   // ── Global keyboard shortcuts ──
@@ -4809,6 +4893,8 @@ function clearFindHighlights() {
   const counter = document.getElementById("find-counter");
   if (counter) counter.textContent = "0 of 0";
 
+  updateMarkdownFindHighlights("");
+
   if (!isMarkdownMode && writerViewEl) {
     const marks = Array.from(writerViewEl.querySelectorAll("mark.find-match, mark"));
     for (const m of marks) {
@@ -4820,6 +4906,67 @@ function clearFindHighlights() {
       }
     }
   }
+}
+
+function updateMarkdownFindHighlights(query) {
+  const backdrop = document.getElementById("markdown-backdrop");
+  if (!backdrop) return;
+
+  if (!query || !isMarkdownMode || !markdownInputEl) {
+    backdrop.replaceChildren();
+    return;
+  }
+
+  const regex = buildFindRegex(query);
+  if (!regex) {
+    backdrop.replaceChildren();
+    return;
+  }
+
+  const text = markdownInputEl.value;
+  if (!text) {
+    backdrop.replaceChildren();
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  regex.lastIndex = 0;
+  let lastIdx = 0;
+  let match;
+  let matchIdx = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    const matchStart = match.index;
+    const matchEnd = match.index + match[0].length;
+
+    if (matchStart > lastIdx) {
+      frag.appendChild(document.createTextNode(text.slice(lastIdx, matchStart)));
+    }
+
+    const mark = document.createElement("mark");
+    mark.className = "find-match" + (matchIdx === currentMatchIndex ? " current-match" : "");
+    mark.textContent = match[0];
+    frag.appendChild(mark);
+
+    lastIdx = matchEnd;
+    matchIdx++;
+
+    if (regex.lastIndex === matchStart) {
+      regex.lastIndex++;
+    }
+  }
+
+  if (lastIdx < text.length) {
+    frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+  }
+
+  if (text.endsWith("\n")) {
+    frag.appendChild(document.createElement("br"));
+  }
+
+  backdrop.replaceChildren(frag);
+  backdrop.scrollTop = markdownInputEl.scrollTop;
+  backdrop.scrollLeft = markdownInputEl.scrollLeft;
 }
 
 function buildFindRegex(query) {
@@ -4973,12 +5120,13 @@ function highlightCurrentMatch() {
   const match = findMatches[currentMatchIndex];
 
   if (isMarkdownMode && markdownInputEl) {
-    markdownInputEl.focus();
     markdownInputEl.setSelectionRange(match.start, match.end);
     const fullText = markdownInputEl.value;
     const linesBefore = fullText.slice(0, match.start).split("\n").length;
     const lineHeight = 20;
-    markdownInputEl.scrollTop = (linesBefore - 3) * lineHeight;
+    markdownInputEl.scrollTop = Math.max(0, (linesBefore - 3) * lineHeight);
+    const query = document.getElementById("find-input")?.value;
+    updateMarkdownFindHighlights(query);
   } else {
     highlightWriterMatches();
   }
@@ -5051,7 +5199,10 @@ async function replaceAll() {
 
 async function applyDocumentText(text) {
   const f = getActiveFile();
-  if (f) f.content = text;
+  if (f) {
+    f.content = text;
+    pushHistory(f, text);
+  }
   if (isMarkdownMode) {
     if (markdownInputEl) {
       markdownInputEl.value = text;
