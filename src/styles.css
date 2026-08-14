@@ -3057,11 +3057,11 @@ mark.find-match.current-match {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MOBILE / ANDROID RESPONSIVE STYLES
-   Target: touch devices (pointer: coarse) and narrow viewports (≤768px)
+   Target: touch devices (narrow viewports ≤768px)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Mobile CSS variables ─────────────────────────────────────────────────── */
-@media (pointer: coarse), (max-width: 768px) {
+@media (max-width: 768px) {
   :root {
     /* Ensure minimum 16px base font to prevent iOS/Android auto-zoom on focus */
     --mobile-tap-size: 44px;
@@ -3146,9 +3146,9 @@ mark.find-match.current-match {
 .mobile-tab-btn span { font-size: 0.65rem; white-space: nowrap; }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   BREAKPOINT: touch pointer OR narrow viewport
+   BREAKPOINT: narrow viewport
    ════════════════════════════════════════════════════════════════════════════ */
-@media (pointer: coarse), (max-width: 768px) {
+@media (max-width: 768px) {
 
   /* Show mobile-only elements */
   #mobile-sidebar-toggle { display: flex; }
