@@ -3054,3 +3054,317 @@ mark.find-match.current-match {
   border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE / ANDROID RESPONSIVE STYLES
+   Target: touch devices (pointer: coarse) and narrow viewports (≤768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Mobile CSS variables ─────────────────────────────────────────────────── */
+@media (pointer: coarse), (max-width: 768px) {
+  :root {
+    /* Ensure minimum 16px base font to prevent iOS/Android auto-zoom on focus */
+    --mobile-tap-size: 44px;
+    --mobile-toolbar-h: 52px;
+    --mobile-header-h: 52px;
+    --mobile-tabbar-h: 56px;
+    --mobile-status-h: 36px;
+    font-size: 16px;
+  }
+}
+
+/* ── Mobile hamburger toggle button ──────────────────────────────────────── */
+#mobile-sidebar-toggle {
+  display: none;
+  width: var(--mobile-tap-size, 44px);
+  height: var(--mobile-tap-size, 44px);
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+#mobile-sidebar-toggle:active { background: var(--selection); }
+
+/* ── Sidebar overlay backdrop (mobile only) ──────────────────────────────── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 90;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+#sidebar-overlay.visible { display: block; }
+
+/* ── Bottom mode tab bar (mobile) ────────────────────────────────────────── */
+#mobile-bottom-tabbar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--mobile-tabbar-h, 56px);
+  background: var(--glass-bg);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 80;
+  flex-direction: row;
+  align-items: stretch;
+  /* Safe area support for devices with home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--comment);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, background 0.15s;
+  padding: 6px 4px;
+}
+.mobile-tab-btn:active { background: var(--selection); }
+.mobile-tab-btn.active { color: var(--accent); }
+.mobile-tab-btn svg { flex-shrink: 0; }
+.mobile-tab-btn span { font-size: 0.65rem; white-space: nowrap; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BREAKPOINT: touch pointer OR narrow viewport
+   ════════════════════════════════════════════════════════════════════════════ */
+@media (pointer: coarse), (max-width: 768px) {
+
+  /* Show mobile-only elements */
+  #mobile-sidebar-toggle { display: flex; }
+  #mobile-bottom-tabbar  { display: flex; }
+
+  /* Hide desktop-only elements */
+  #tui-menubar          { display: none !important; }
+  .toolbar-sep          { display: none; }
+  #mode-segmented-group { display: none !important; }
+  /* Tab bar is too small on mobile — hide it */
+  #tab-bar              { display: none; }
+  /* Status bar takes up too much vertical space on mobile — hide it completely */
+  #status-bar           { display: none !important; }
+  /* Hide the desktop main menu button in favour of the mobile swipe toggle */
+  #main-menu-btn        { display: none !important; }
+
+  /* ── Header ────────────────────────────────────────────────────────────── */
+  #app-header {
+    /* Safe area inset for notch/punch-hole cameras + base height */
+    height: calc(var(--mobile-header-h, 52px) + max(env(safe-area-inset-top), 24px));
+    padding: 0 8px;
+    padding-top: max(env(safe-area-inset-top), 24px);
+  }
+
+  .header-center .app-title { font-size: 1rem; }
+  .app-version { display: none; }
+
+  /* ── Sidebar: drawer that slides in from left ──────────────────────────── */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(85vw, 320px);
+    z-index: 100;
+    transform: translateX(-105%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    border-right: 1px solid var(--border);
+    /* Respect safe areas */
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  #sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
+  }
+
+  /* Sidebar tabs: larger tap targets */
+  .sidebar-tab {
+    min-height: var(--mobile-tap-size, 44px);
+    font-size: 0.9rem;
+  }
+
+  /* File list items: larger tap targets */
+  .file-item {
+    min-height: 48px;
+    padding: 0.75rem 0.85rem;
+    font-size: 0.9rem;
+  }
+
+  /* Always show file actions on mobile (no hover state) */
+  .file-item-actions { display: flex; }
+  .file-action-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+
+  /* ── Toolbar: horizontal scroll strip ─────────────────────────────────── */
+  #toolbar {
+    height: var(--mobile-toolbar-h, 52px);
+    min-height: var(--mobile-toolbar-h, 52px);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    padding: 4px 8px;
+    gap: 4px;
+    order: 3;
+    border-bottom: none !important;
+    border-top: 1px solid var(--border);
+  }
+
+  /* All toolbar buttons: minimum 44×44px tap targets */
+  .icon-btn, .fmt-btn {
+    width:  var(--mobile-tap-size, 44px);
+    height: var(--mobile-tap-size, 44px);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    border-radius: 8px;
+  }
+
+  /* H1–H6 heading buttons: slightly wider */
+  .h-btn {
+    min-width: 48px;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  /* Remove toolbar spacer (not useful in horizontal-scroll mode) */
+  .toolbar-spacer { display: none; }
+
+  #editor-container {
+    padding-bottom: var(--mobile-tabbar-h, 56px);
+  }
+
+  /* ── Editor area ───────────────────────────────────────────────────────── */
+  #editor-area {
+    /* Use flexbox to fill remaining space so we don't overflow the container and hide the toolbar */
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    order: 2;
+  }
+
+  /* Writer view: minimum 16px text, comfortable line height for mobile */
+  #writer-view {
+    font-size: 16px !important;
+    line-height: 1.7 !important;
+    padding: 1rem 1.2rem !important;
+    /* Prevent horizontal overflow on small screens */
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Markdown textarea: 16px minimum to prevent Android auto-zoom on focus */
+  #markdown-input {
+    font-size: 16px !important;
+    line-height: 1.65 !important;
+    padding: 1rem !important;
+  }
+
+  /* Split view is too narrow on mobile — hide it */
+  #editor-area.split-active #markdown-input,
+  #editor-area.split-active #markdown-backdrop {
+    display: none !important;
+  }
+  #editor-area.split-active #writer-view {
+    width: 100% !important;
+  }
+
+  /* ── Status bar (Hidden on mobile) ─────────────────────────────────────── */
+  #status-bar {
+    display: none !important;
+  }
+
+  /* ── Modals: full-width on mobile ──────────────────────────────────────── */
+  .modal-dialog {
+    width: min(92vw, 480px) !important;
+    max-height: 85dvh;
+    overflow-y: auto;
+    margin: auto;
+  }
+
+  /* ── Dropdowns: full-width on mobile ───────────────────────────────────── */
+  .dropdown-menu {
+    width: min(92vw, 320px);
+    max-height: 70dvh;
+    overflow-y: auto;
+  }
+
+  /* ── Find bar: full width, stacked layout ───────────────────────────────── */
+  .find-replace-bar {
+    left: 4px !important;
+    right: 4px !important;
+    top: 4px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+  .find-replace-row { flex-wrap: wrap; gap: 8px; }
+  #find-input { font-size: 16px; min-width: 0; flex: 1; }
+
+  /* ── Nextcloud file list ─────────────────────────────────────────────────── */
+  .nc-file-list .file-item {
+    min-height: 52px;
+    padding: 0.9rem 0.85rem;
+  }
+
+  /* ── Preferences modal fields ────────────────────────────────────────────── */
+  .pref-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .pref-select { width: 100% !important; max-width: none !important; }
+  #nc-server-url, #nc-username, #nc-password { font-size: 16px !important; }
+
+  /* ── Tap feedback animations ─────────────────────────────────────────────── */
+  .icon-btn:active,
+  .mobile-tab-btn:active,
+  .file-item:active,
+  .menu-item:active {
+    transform: scale(0.95);
+    opacity: 0.85;
+    transition: transform 0.08s, opacity 0.08s;
+  }
+
+  /* Disable hover states (they're sticky on touch) */
+  .file-item:hover { background: transparent; color: var(--comment); }
+  .file-item.active:hover { background: rgba(189, 147, 249, 0.18); color: var(--purple); }
+  .icon-btn:hover { background: transparent; color: var(--comment); }
+}
+
+/* ── Very narrow phones (< 380px) ────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .mobile-tab-btn span { display: none; }
+  #mobile-bottom-tabbar { height: 50px; }
+  .icon-btn, .fmt-btn { width: 40px; height: 40px; }
+}
+
+/* ── Landscape mode on phones ────────────────────────────────────────────── */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  #mobile-bottom-tabbar { display: none; }
+  #mode-segmented-group { display: flex !important; }
+  #editor-area {
+    height: calc(100dvh - var(--mobile-header-h, 52px) - var(--mobile-toolbar-h, 52px));
+  }
+}

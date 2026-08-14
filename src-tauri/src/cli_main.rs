@@ -354,7 +354,7 @@ impl App {
             _ => Theme::Dracula,
         };
 
-        let nc_cfg = artfultype_rs_lib::nextcloud::load_config();
+        let nc_cfg = artfultype_rs_lib::nextcloud::load_config(None);
         App {
             file_path,
             file_name,
@@ -986,7 +986,7 @@ impl App {
         if self.is_nextcloud_file {
             if let (Some(ref cfg), Some(ref remote_path)) = (&self.nextcloud_config, &self.nextcloud_remote_path) {
                 let remote_path_clone = remote_path.clone();
-                match artfultype_rs_lib::nextcloud::write_file(cfg, &remote_path_clone, &self.content) {
+                match artfultype_rs_lib::nextcloud::write_file_sync(cfg, &remote_path_clone, &self.content) {
                     Ok(_) => {
                         self.dirty = false;
                         let clean_name = self.file_name.trim_start_matches("☁ ").to_string();
@@ -1171,7 +1171,7 @@ impl App {
             }
             MenuAction::NextcloudConfig => {
                 if self.nextcloud_config.is_none() {
-                    self.nextcloud_config = artfultype_rs_lib::nextcloud::load_config();
+                    self.nextcloud_config = artfultype_rs_lib::nextcloud::load_config(None);
                 }
                 let (url, user, pass) = if let Some(ref cfg) = self.nextcloud_config {
                     (cfg.server_url.clone(), cfg.username.clone(), cfg.password.clone())
@@ -1188,10 +1188,10 @@ impl App {
             }
             MenuAction::NextcloudOpen => {
                 if self.nextcloud_config.is_none() {
-                    self.nextcloud_config = artfultype_rs_lib::nextcloud::load_config();
+                    self.nextcloud_config = artfultype_rs_lib::nextcloud::load_config(None);
                 }
                 if let Some(ref cfg) = self.nextcloud_config {
-                    match artfultype_rs_lib::nextcloud::list_folder(cfg, "") {
+                    match artfultype_rs_lib::nextcloud::list_folder_sync(cfg, "") {
                         Ok(entries) => {
                             self.popup = PopupState::NextcloudOpen {
                                 remote_path: "".to_string(),
@@ -1619,10 +1619,10 @@ fn run_app<B: ratatui::backend::Backend>(
                             match key.code {
                                 KeyCode::Tab => {
                                     if app.nextcloud_config.is_none() {
-                                        app.nextcloud_config = artfultype_rs_lib::nextcloud::load_config();
+                                        app.nextcloud_config = artfultype_rs_lib::nextcloud::load_config(None);
                                     }
                                     if let Some(ref cfg) = app.nextcloud_config {
-                                        if let Ok(nc_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, "") {
+                                        if let Ok(nc_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, "") {
                                             let clean_input = input.trim_start_matches("☁ ").trim().to_string();
                                             app.popup = PopupState::NextcloudSaveAs {
                                                 remote_path: "".to_string(),
@@ -1890,7 +1890,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                             if item.name == ".." {
                                                 let parent = std::path::Path::new(&remote_path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                                                 if let Some(ref cfg) = app.nextcloud_config {
-                                                    if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, &parent) {
+                                                    if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, &parent) {
                                                         if !parent.is_empty() {
                                                             let p_dir = std::path::Path::new(&parent).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                                                             new_entries.insert(0, artfultype_rs_lib::nextcloud::NextcloudEntry { name: "..".to_string(), path: p_dir, is_dir: true, size: 0, modified: String::new() });
@@ -1902,7 +1902,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                                     }
                                                 }
                                             } else if let Some(ref cfg) = app.nextcloud_config {
-                                                if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, &item.path) {
+                                                if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, &item.path) {
                                                     new_entries.insert(0, artfultype_rs_lib::nextcloud::NextcloudEntry { name: "..".to_string(), path: remote_path.clone(), is_dir: true, size: 0, modified: String::new() });
                                                     remote_path = item.path.clone();
                                                     entries = new_entries;
@@ -2054,10 +2054,10 @@ fn run_app<B: ratatui::backend::Backend>(
                                  KeyCode::Esc => app.popup = PopupState::None,
                                  KeyCode::Tab => {
                                      if app.nextcloud_config.is_none() {
-                                         app.nextcloud_config = artfultype_rs_lib::nextcloud::load_config();
+                                         app.nextcloud_config = artfultype_rs_lib::nextcloud::load_config(None);
                                      }
                                      if let Some(ref cfg) = app.nextcloud_config {
-                                         if let Ok(nc_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, "") {
+                                         if let Ok(nc_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, "") {
                                              app.popup = PopupState::NextcloudOpen {
                                                  remote_path: "".to_string(),
                                                  entries: nc_entries,
@@ -2086,7 +2086,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                  }
                                  KeyCode::Enter => {
                                      if focus == 4 {
-                                         let _ = artfultype_rs_lib::nextcloud::unlink_config();
+                                         let _ = artfultype_rs_lib::nextcloud::unlink_config(None);
                                          app.nextcloud_config = None;
                                          app.popup = PopupState::None;
                                          app.status_msg = "Unlinked Nextcloud account".to_string();
@@ -2097,9 +2097,9 @@ fn run_app<B: ratatui::backend::Backend>(
                                              password: password_input.clone(),
                                              enabled: true,
                                          };
-                                         match artfultype_rs_lib::nextcloud::test_connection(&cfg) {
+                                         match artfultype_rs_lib::nextcloud::test_connection_sync(&cfg) {
                                              Ok(msg) => {
-                                                 let _ = artfultype_rs_lib::nextcloud::save_config(&cfg);
+                                                 let _ = artfultype_rs_lib::nextcloud::save_config(None, &cfg);
                                                  app.nextcloud_config = Some(cfg);
                                                  app.popup = PopupState::None;
                                                  app.status_msg = format!("Nextcloud linked: {}", msg);
@@ -2139,7 +2139,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                      let rec_idx = if key.code == KeyCode::Char('1') { 0 } else { 1 };
                                      if let Some((path, name)) = app.recent_nextcloud_files.get(rec_idx).cloned() {
                                          if let Some(ref cfg) = app.nextcloud_config {
-                                             match artfultype_rs_lib::nextcloud::read_file(cfg, &path) {
+                                             match artfultype_rs_lib::nextcloud::read_file_sync(cfg, &path) {
                                                  Ok(content) => {
                                                      app.content = content;
                                                      app.file_path = None;
@@ -2190,7 +2190,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                              if item.name == ".." {
                                                  let parent = std::path::Path::new(&remote_path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                                                  if let Some(ref cfg) = app.nextcloud_config {
-                                                     if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, &parent) {
+                                                     if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, &parent) {
                                                          if !parent.is_empty() {
                                                              let p_dir = std::path::Path::new(&parent).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                                                              new_entries.insert(0, artfultype_rs_lib::nextcloud::NextcloudEntry { name: "..".to_string(), path: p_dir, is_dir: true, size: 0, modified: String::new() });
@@ -2202,7 +2202,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                                      }
                                                  }
                                              } else if let Some(ref cfg) = app.nextcloud_config {
-                                                 if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder(cfg, &item.path) {
+                                                 if let Ok(mut new_entries) = artfultype_rs_lib::nextcloud::list_folder_sync(cfg, &item.path) {
                                                      new_entries.insert(0, artfultype_rs_lib::nextcloud::NextcloudEntry { name: "..".to_string(), path: remote_path.clone(), is_dir: true, size: 0, modified: String::new() });
                                                      remote_path = item.path;
                                                      entries = new_entries;
@@ -2213,7 +2213,7 @@ fn run_app<B: ratatui::backend::Backend>(
                                              app.popup = PopupState::NextcloudOpen { remote_path, entries, selected, scroll };
                                          } else {
                                              if let Some(ref cfg) = app.nextcloud_config {
-                                                 match artfultype_rs_lib::nextcloud::read_file(cfg, &item.path) {
+                                                 match artfultype_rs_lib::nextcloud::read_file_sync(cfg, &item.path) {
                                                      Ok(content) => {
                                                          app.content = content;
                                                          app.file_path = None;

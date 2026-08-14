@@ -4,9 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#282a36" />
     <title>ArtfulType Pro</title>
     <meta name="description" content="ArtfulType Pro — a beautiful Dracula-themed Markdown editor with Writer and Markdown modes." />
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        alert("JS Error: " + msg + "\nLine: " + lineNo + "\nCol: " + columnNo);
+        return false;
+      };
+      window.addEventListener("unhandledrejection", function(event) {
+        alert("Unhandled Promise Rejection: " + event.reason);
+      });
+    </script>
     <script src="/highlighter.js" defer></script>
     <script type="module" src="/main.js" defer></script>
   </head>
@@ -16,6 +28,14 @@
       <!-- ── Application Header ──────────────────────────────────── -->
       <header id="app-header" class="glass-panel">
         <div class="header-left">
+          <!-- Mobile hamburger: shown only on touch devices via CSS -->
+          <button id="mobile-sidebar-toggle" aria-label="Toggle file sidebar">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
           <button id="main-menu-btn" class="icon-btn" title="Main Menu">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
@@ -42,6 +62,9 @@
           </button>
         </div>
       </header>
+
+      <!-- Sidebar overlay backdrop (mobile only) -->
+      <div id="sidebar-overlay" aria-hidden="true"></div>
 
       <div id="app-body">
         <!-- ── Sidebar ─────────────────────────────────────────────── -->
@@ -556,4 +579,32 @@
     </dialog>
 
   </body>
+
+  <!-- Mobile bottom tab bar (Writer / Markdown switcher) -->
+  <!-- Rendered outside app-body to sit above everything with fixed positioning -->
+  <nav id="mobile-bottom-tabbar" aria-label="Editor mode">
+    <button id="mobile-tab-writer" class="mobile-tab-btn active" aria-pressed="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+      </svg>
+      <span>Writer</span>
+    </button>
+    <button id="mobile-tab-markdown" class="mobile-tab-btn" aria-pressed="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>Markdown</span>
+    </button>
+    <button id="mobile-tab-files" class="mobile-tab-btn" aria-pressed="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/>
+      </svg>
+      <span>Files</span>
+    </button>
+  </nav>
+
 </html>

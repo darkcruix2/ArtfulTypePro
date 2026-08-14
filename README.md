@@ -9,6 +9,11 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 
 ## Screenshots
 
+### Android
+
+**Android (Universal APK)**
+![ArtfulType Pro on Android](assets/android-preview.png)
+
 ### GUI (macOS, Windows 11, Linux)
 
 **macOS (ARM64)**
@@ -87,6 +92,10 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 ## Pre-built Releases (v0.30.3)
 
 Pre-compiled release binaries and packages are available in the `releases/` directory in this repository:
+
+### Android
+
+- **Universal APK**: [release/ArtfulTypePro-Android.apk](release/ArtfulTypePro-Android.apk)
 
 ### macOS (ARM64)
 

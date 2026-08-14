@@ -4346,6 +4346,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   updateStats(defaultMd);
   setDirty(false);
 
+  // Clear default text when user clicks or focuses the editor area
+  const clearDefaultText = () => {
+    if (!(getActiveFile()?.dirty) && markdownInputEl.value === defaultMd) {
+      markdownInputEl.value = "";
+      renderMarkdownToWriter("");
+      updateStats("");
+      markdownInputEl.removeEventListener("focus", clearDefaultText);
+      writerViewEl.removeEventListener("focus", clearDefaultText);
+      markdownInputEl.removeEventListener("click", clearDefaultText);
+      writerViewEl.removeEventListener("click", clearDefaultText);
+    }
+  };
+  markdownInputEl.addEventListener("focus", clearDefaultText);
+  writerViewEl.addEventListener("focus", clearDefaultText);
+  markdownInputEl.addEventListener("click", clearDefaultText);
+  writerViewEl.addEventListener("click", clearDefaultText);
+
   // ── CLI Launch Payload ──
   try {
     const cliArgs = await invoke("get_cli_args");
@@ -5314,3 +5331,236 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOBILE / ANDROID MODULE
+// Handles: sidebar drawer, bottom tab bar, virtual keyboard, file I/O routing
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Platform detection ────────────────────────────────────────────────────────
+// `platform` is set early in DOMContentLoaded via `get_platform` invoke.
+// We also check pointer type for responsive layout decisions.
+const isTouchDevice = () =>
+  window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+
+function isAndroid() {
+  return platform === "android";
+}
+
+// ── Sidebar drawer (mobile) ───────────────────────────────────────────────────
+function openSidebarDrawer() {
+  const sidebar  = document.getElementById("sidebar");
+  const overlay  = document.getElementById("sidebar-overlay");
+  const toggle   = document.getElementById("mobile-sidebar-toggle");
+  sidebar?.classList.add("open");
+  overlay?.classList.add("visible");
+  toggle?.setAttribute("aria-expanded", "true");
+}
+
+function closeSidebarDrawer() {
+  const sidebar  = document.getElementById("sidebar");
+  const overlay  = document.getElementById("sidebar-overlay");
+  const toggle   = document.getElementById("mobile-sidebar-toggle");
+  sidebar?.classList.remove("open");
+  overlay?.classList.remove("visible");
+  toggle?.setAttribute("aria-expanded", "false");
+}
+
+// ── Bottom tab bar mode switching ─────────────────────────────────────────────
+function updateMobileTabBar(mode) {
+  document.getElementById("mobile-tab-writer")?.classList.toggle("active",   mode === "writer");
+  document.getElementById("mobile-tab-markdown")?.classList.toggle("active", mode === "markdown");
+  document.getElementById("mobile-tab-files")?.classList.toggle("active",    mode === "files");
+
+  document.getElementById("mobile-tab-writer")?.setAttribute("aria-pressed",   String(mode === "writer"));
+  document.getElementById("mobile-tab-markdown")?.setAttribute("aria-pressed", String(mode === "markdown"));
+  document.getElementById("mobile-tab-files")?.setAttribute("aria-pressed",    String(mode === "files"));
+}
+
+// ── Touch swipe gesture for sidebar ──────────────────────────────────────────
+(function initSwipeGesture() {
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  document.addEventListener("touchstart", (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    if (!isTouchDevice()) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+
+    // Only register horizontal swipes (more horizontal than vertical)
+    if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (Math.abs(dx) < 50) return; // minimum swipe distance
+
+    const sidebar = document.getElementById("sidebar");
+    if (dx > 0 && touchStartX < 40) {
+      // Swipe right from left edge → open drawer
+      openSidebarDrawer();
+    } else if (dx < 0 && sidebar?.classList.contains("open")) {
+      // Swipe left with drawer open → close drawer
+      closeSidebarDrawer();
+    }
+  }, { passive: true });
+})();
+
+// ── Virtual keyboard handling ─────────────────────────────────────────────────
+// Android's soft keyboard reduces the visual viewport height. We use the
+// VisualViewport API (where available) to track this and adjust editor height.
+(function initVirtualKeyboardHandler() {
+  if (!window.visualViewport) return;
+
+  const editorArea = document.getElementById("editor-area");
+  if (!editorArea) return;
+
+  let lastViewportHeight = window.visualViewport.height;
+
+  window.visualViewport.addEventListener("resize", () => {
+    if (!isTouchDevice()) return;
+    const newHeight = window.visualViewport.height;
+    const delta = lastViewportHeight - newHeight;
+    lastViewportHeight = newHeight;
+
+    if (delta > 100) {
+      // Keyboard appeared — shrink editor to keep it visible
+      editorArea.style.maxHeight = `${newHeight - 110}px`;
+    } else if (delta < -50) {
+      // Keyboard dismissed — restore full height
+      editorArea.style.maxHeight = "";
+    }
+  });
+})();
+
+// ── Android / Mobile file I/O routing ────────────────────────────────────────
+// Override openFile and saveFile for Android to use the Storage Access Framework
+// (via tauri-plugin-dialog) instead of the desktop rfd dialogs.
+
+const _originalOpenFile = openFile;
+const _originalSaveFileAs = saveFileAs;
+
+openFile = async function() {
+  if (!isAndroid()) {
+    return _originalOpenFile.apply(this, arguments);
+  }
+
+  // Android: use tauri-plugin-dialog for SAF file picker
+  try {
+    statusMessageEl.textContent = "Opening…";
+    const result = await invoke("plugin:dialog|open", {
+      multiple: false,
+      filters: [{ name: "Text & Markdown", extensions: ["md", "markdown", "txt", "json", "yaml", "yml", "rs", "py", "js", "ts", "html", "css"] }],
+    });
+
+    if (result) {
+      const path = typeof result === "string" ? result : result[0];
+      const fileData = await invoke("read_file", { path });
+      await applyOpenedFile(fileData);
+      statusMessageEl.textContent = `Opened: ${fileData.name}`;
+    } else {
+      statusMessageEl.textContent = "Ready";
+    }
+  } catch (e) {
+    console.error("Android open error:", e);
+    statusMessageEl.textContent = "Error opening file";
+  }
+};
+
+saveFileAs = async function(silent = false) {
+  if (!isAndroid()) {
+    return _originalSaveFileAs.call(this, silent);
+  }
+
+  // Android: use tauri-plugin-dialog SAF save picker
+  syncActiveFileContent();
+  let f = getActiveFile();
+  const content = f ? f.content : getCurrentMarkdown();
+
+  try {
+    const savedPath = await invoke("plugin:dialog|save", {
+      defaultPath: f?.name || "untitled.md",
+      filters: [{ name: "Markdown", extensions: ["md", "txt"] }],
+    });
+
+    if (savedPath) {
+      await invoke("save_file", { path: savedPath, content });
+      if (f) {
+        f.path = savedPath;
+        f.id = savedPath;
+        activeFileId = savedPath;
+        f.name = savedPath.split(/[/\\]/).pop();
+        f.dirty = false;
+        addToRecentFiles(savedPath, f.name);
+        renderTabBar(); renderFileList();
+      }
+      if (!silent) statusMessageEl.textContent = `Saved: ${savedPath.split(/[/\\]/).pop()}`;
+    } else {
+      if (!silent) statusMessageEl.textContent = "Save cancelled.";
+    }
+  } catch (e) {
+    console.error("Android save error:", e);
+    if (!silent) statusMessageEl.textContent = "Error saving file";
+  }
+}
+
+// ── Wire up mobile UI on DOMContentLoaded ────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  // Hamburger toggle
+  document.getElementById("mobile-sidebar-toggle")?.addEventListener("click", () => {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar?.classList.contains("open")) {
+      closeSidebarDrawer();
+    } else {
+      openSidebarDrawer();
+    }
+  });
+
+  // Overlay tap closes drawer
+  document.getElementById("sidebar-overlay")?.addEventListener("click", closeSidebarDrawer);
+
+  // Close drawer when a file item is tapped on mobile
+  document.getElementById("file-list")?.addEventListener("click", () => {
+    if (isTouchDevice()) setTimeout(closeSidebarDrawer, 80);
+  });
+  document.getElementById("nc-file-list")?.addEventListener("click", () => {
+    if (isTouchDevice()) setTimeout(closeSidebarDrawer, 80);
+  });
+
+  // Bottom tab bar — Writer
+  document.getElementById("mobile-tab-writer")?.addEventListener("click", () => {
+    if (!isMarkdownMode) return; // already in writer mode
+    toggleMode(); // existing toggle function switches between writer/markdown
+    updateMobileTabBar("writer");
+  });
+
+  // Bottom tab bar — Markdown
+  document.getElementById("mobile-tab-markdown")?.addEventListener("click", () => {
+    if (isMarkdownMode) return; // already in markdown mode
+    toggleMode();
+    updateMobileTabBar("markdown");
+  });
+
+  // Bottom tab bar — Files (opens sidebar drawer)
+  document.getElementById("mobile-tab-files")?.addEventListener("click", () => {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar?.classList.contains("open")) {
+      closeSidebarDrawer();
+      updateMobileTabBar(isMarkdownMode ? "markdown" : "writer");
+    } else {
+      openSidebarDrawer();
+      updateMobileTabBar("files");
+    }
+  });
+
+  // Keep bottom tab bar in sync when mode changes via desktop mode buttons
+  document.getElementById("mode-writer-btn")?.addEventListener("click", () => updateMobileTabBar("writer"));
+  document.getElementById("mode-markdown-btn")?.addEventListener("click", () => updateMobileTabBar("markdown"));
+
+  // Prevent toolbar from losing keyboard focus on mobile when tapping buttons
+  // (touch-and-hold on Android can trigger contextmenu)
+  document.getElementById("toolbar")?.addEventListener("contextmenu", (e) => {
+    if (isTouchDevice()) e.preventDefault();
+  });
+});

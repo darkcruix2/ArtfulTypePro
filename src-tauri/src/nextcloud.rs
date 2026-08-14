@@ -1,7 +1,23 @@
 use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
 use reqwest::blocking::Client;
+
+// On Android we run all blocking network calls on a thread-pool worker.
+// On desktop we call them directly (blocking is fine on a Tauri command thread).
+#[cfg(target_os = "android")]
+macro_rules! maybe_spawn_blocking {
+    ($block:expr) => {{
+        tokio::task::spawn_blocking(move || $block)
+            .await
+            .map_err(|e| format!("Thread join error: {e}"))?
+    }};
+}
+#[cfg(not(target_os = "android"))]
+macro_rules! maybe_spawn_blocking {
+    ($block:expr) => {{ $block }};
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct NextcloudConfig {
@@ -20,7 +36,13 @@ pub struct NextcloudEntry {
     pub modified: String,
 }
 
-pub fn get_config_dir() -> PathBuf {
+pub fn get_config_dir(app: Option<&tauri::AppHandle>) -> PathBuf {
+    if let Some(a) = app {
+        if let Ok(p) = a.path().app_config_dir() {
+            let _ = fs::create_dir_all(&p);
+            return p;
+        }
+    }
     if let Some(dir) = dirs_next() {
         return dir;
     }
@@ -28,6 +50,14 @@ pub fn get_config_dir() -> PathBuf {
 }
 
 fn dirs_next() -> Option<PathBuf> {
+    // Android: Tauri sets ANDROID_DATA to the app-private data directory
+    #[cfg(target_os = "android")]
+    if let Ok(data) = std::env::var("ANDROID_DATA") {
+        let p = PathBuf::from(data).join("artfultype");
+        let _ = fs::create_dir_all(&p);
+        return Some(p);
+    }
+
     if let Ok(home) = std::env::var("HOME") {
         let p = PathBuf::from(home).join(".config").join("artfultype");
         let _ = fs::create_dir_all(&p);
@@ -46,12 +76,12 @@ fn dirs_next() -> Option<PathBuf> {
     None
 }
 
-pub fn get_config_path() -> PathBuf {
-    get_config_dir().join("nextcloud.json")
+pub fn get_config_path(app: Option<&tauri::AppHandle>) -> PathBuf {
+    get_config_dir(app).join("nextcloud.json")
 }
 
-pub fn load_config() -> Option<NextcloudConfig> {
-    let path = get_config_path();
+pub fn load_config(app: Option<&tauri::AppHandle>) -> Option<NextcloudConfig> {
+    let path = get_config_path(app);
     if path.exists() {
         if let Ok(content) = fs::read_to_string(path) {
             if let Ok(config) = serde_json::from_str::<NextcloudConfig>(&content) {
@@ -62,8 +92,8 @@ pub fn load_config() -> Option<NextcloudConfig> {
     None
 }
 
-pub fn save_config(config: &NextcloudConfig) -> Result<(), String> {
-    let path = get_config_path();
+pub fn save_config(app: Option<&tauri::AppHandle>, config: &NextcloudConfig) -> Result<(), String> {
+    let path = get_config_path(app);
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -78,8 +108,8 @@ pub fn save_config(config: &NextcloudConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub fn unlink_config() -> Result<(), String> {
-    let path = get_config_path();
+pub fn unlink_config(app: Option<&tauri::AppHandle>) -> Result<(), String> {
+    let path = get_config_path(app);
     if path.exists() {
         fs::remove_file(path).map_err(|e| e.to_string())?;
     }
@@ -114,7 +144,7 @@ impl Default for CliSettings {
 }
 
 pub fn get_cli_settings_path() -> PathBuf {
-    get_config_dir().join("cli_settings.json")
+    get_config_dir(None).join("cli_settings.json")
 }
 
 pub fn load_cli_settings() -> CliSettings {
@@ -169,11 +199,12 @@ pub fn build_webdav_url(config: &NextcloudConfig, relative_path: &str) -> String
 fn create_webdav_client() -> Result<Client, String> {
     Client::builder()
         .timeout(std::time::Duration::from_secs(15))
+        // On Android, the system trust store is used automatically by reqwest/rustls
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))
 }
 
-pub fn test_connection(config: &NextcloudConfig) -> Result<String, String> {
+pub fn test_connection_sync(config: &NextcloudConfig) -> Result<String, String> {
     if config.server_url.trim().is_empty() || config.username.trim().is_empty() {
         return Err("Server URL and Username are required".to_string());
     }
@@ -198,7 +229,12 @@ pub fn test_connection(config: &NextcloudConfig) -> Result<String, String> {
     }
 }
 
-pub fn list_folder(config: &NextcloudConfig, relative_path: &str) -> Result<Vec<NextcloudEntry>, String> {
+/// Async-safe wrapper: runs blocking HTTP on a thread-pool worker on Android.
+pub async fn test_connection(config: NextcloudConfig) -> Result<String, String> {
+    maybe_spawn_blocking!(test_connection_sync(&config))
+}
+
+pub fn list_folder_sync(config: &NextcloudConfig, relative_path: &str) -> Result<Vec<NextcloudEntry>, String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -217,6 +253,10 @@ pub fn list_folder(config: &NextcloudConfig, relative_path: &str) -> Result<Vec<
 
     let xml_body = res.text().map_err(|e| format!("Failed to read response body: {e}"))?;
     parse_webdav_propfind_xml(&xml_body, relative_path, &config.username)
+}
+
+pub async fn list_folder(config: NextcloudConfig, relative_path: String) -> Result<Vec<NextcloudEntry>, String> {
+    maybe_spawn_blocking!(list_folder_sync(&config, &relative_path))
 }
 
 fn parse_webdav_propfind_xml(xml: &str, current_rel_path: &str, username: &str) -> Result<Vec<NextcloudEntry>, String> {
@@ -369,7 +409,7 @@ fn urlencoding_decode(s: &str) -> String {
     result
 }
 
-pub fn read_file(config: &NextcloudConfig, relative_path: &str) -> Result<String, String> {
+pub fn read_file_sync(config: &NextcloudConfig, relative_path: &str) -> Result<String, String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -386,7 +426,11 @@ pub fn read_file(config: &NextcloudConfig, relative_path: &str) -> Result<String
     res.text().map_err(|e| format!("Failed to read file content: {e}"))
 }
 
-pub fn read_image_base64(config: &NextcloudConfig, relative_path: &str) -> Result<String, String> {
+pub async fn read_file(config: NextcloudConfig, relative_path: String) -> Result<String, String> {
+    maybe_spawn_blocking!(read_file_sync(&config, &relative_path))
+}
+
+pub fn read_image_base64_sync(config: &NextcloudConfig, relative_path: &str) -> Result<String, String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -422,7 +466,11 @@ pub fn read_image_base64(config: &NextcloudConfig, relative_path: &str) -> Resul
     Ok(format!("data:{mime};base64,{b64}"))
 }
 
-pub fn write_file(config: &NextcloudConfig, relative_path: &str, content: &str) -> Result<(), String> {
+pub async fn read_image_base64(config: NextcloudConfig, relative_path: String) -> Result<String, String> {
+    maybe_spawn_blocking!(read_image_base64_sync(&config, &relative_path))
+}
+
+pub fn write_file_sync(config: &NextcloudConfig, relative_path: &str, content: &str) -> Result<(), String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -441,7 +489,11 @@ pub fn write_file(config: &NextcloudConfig, relative_path: &str, content: &str) 
     Ok(())
 }
 
-pub fn delete_entry(config: &NextcloudConfig, relative_path: &str) -> Result<(), String> {
+pub async fn write_file(config: NextcloudConfig, relative_path: String, content: String) -> Result<(), String> {
+    maybe_spawn_blocking!(write_file_sync(&config, &relative_path, &content))
+}
+
+pub fn delete_entry_sync(config: &NextcloudConfig, relative_path: &str) -> Result<(), String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -458,7 +510,11 @@ pub fn delete_entry(config: &NextcloudConfig, relative_path: &str) -> Result<(),
     Ok(())
 }
 
-pub fn create_folder(config: &NextcloudConfig, relative_path: &str) -> Result<(), String> {
+pub async fn delete_entry(config: NextcloudConfig, relative_path: String) -> Result<(), String> {
+    maybe_spawn_blocking!(delete_entry_sync(&config, &relative_path))
+}
+
+pub fn create_folder_sync(config: &NextcloudConfig, relative_path: &str) -> Result<(), String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);
 
@@ -473,6 +529,10 @@ pub fn create_folder(config: &NextcloudConfig, relative_path: &str) -> Result<()
     }
 
     Ok(())
+}
+
+pub async fn create_folder(config: NextcloudConfig, relative_path: String) -> Result<(), String> {
+    maybe_spawn_blocking!(create_folder_sync(&config, &relative_path))
 }
 
 #[cfg(test)]

@@ -42,7 +42,8 @@ CP          := cp -r
 
 # ─────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := build
-.PHONY: all build deb install uninstall clean deps check
+.PHONY: all build deb install uninstall clean deps check \
+        android-setup android-dev android-build android-check
 
 # ─── Build release binary ─────────────────────────────────────────────────────
 all: build
@@ -134,3 +135,41 @@ deps:
 # ─── Fast check (no link, no bundle) ──────────────────────────────────────────
 check:
 	cargo check --manifest-path $(TAURI_SRC)/Cargo.toml
+
+# ─── Android targets ───────────────────────────────────────────────────────────
+# Prerequisites: ANDROID_HOME, ANDROID_NDK_HOME must be set in environment.
+# Run 'make android-setup' once to generate the Gradle project.
+
+ANDROID_HOME ?= $(HOME)/android-sdk
+ANDROID_NDK_HOME ?= $(ANDROID_HOME)/ndk/28.0.13004108
+NDK_VERSION ?= 28.0.13004108
+
+export ANDROID_HOME
+export ANDROID_NDK_HOME
+export NDK_VERSION
+
+android-setup:
+	@echo "→ Setting up Tauri Android project…"
+	rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+	cargo install cargo-ndk --locked 2>/dev/null || true
+	$(CARGO_TAURI) android init
+	@echo "✓ Android project generated in $(TAURI_SRC)/gen/android/"
+	@echo "  Review AndroidManifest.xml and customize icons before building."
+
+android-dev:
+	@echo "→ Starting Android dev server (connect device or start emulator first)…"
+	$(CARGO_TAURI) android dev
+
+android-build:
+	@echo "→ Building Android APK (release)…"
+	$(CARGO_TAURI) android build --apk
+	@echo "✓ APK output:"
+	@find $(TAURI_SRC)/gen/android -name "*.apk" 2>/dev/null | head -5 || echo "  (check build output above)"
+
+android-check:
+	@echo "→ Fast compile check for Android (aarch64)…"
+	cargo check \
+	  --manifest-path $(TAURI_SRC)/Cargo.toml \
+	  --no-default-features \
+	  --target aarch64-linux-android 2>&1 | grep -E "^error|^warning.*unused" | head -20
+	@echo "✓ Check complete"

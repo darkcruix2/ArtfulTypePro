@@ -36,3 +36,20 @@ src-tauri/gen/
 
 # Ignore raw uncompressed AppImages over 100MB
 *.AppImage
+
+# Android build artefacts (Tauri-generated Gradle project)
+# Note: src-tauri/gen/ is already ignored above — these are extra safety rules
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/.idea/
+
+# Android output packages
+*.apk
+*.aab
+*.apks
+
+# Android keystore (never commit signing keys)
+*.jks
+*.keystore
+release-keystore.properties
