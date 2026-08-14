@@ -94,32 +94,30 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 Pre-compiled release binaries and packages are available in the `releases/` directory in this repository:
 
 ### Android
+## Pre-built Releases (v0.30.4)
 
-- **Universal APK**: [release/ArtfulTypePro-Android.apk](release/ArtfulTypePro-Android.apk)
+See the [releases/](releases/) directory for compiled binaries.
 
-### macOS (ARM64)
+### Android
+- **Android (Universal APK)**: [release/ArtfulTypePro-Android.apk](release/ArtfulTypePro-Android.apk)
 
-- **GUI DMG Installer**: [releases/artfultype-rs_0.30.2_aarch64.dmg](releases/artfultype-rs_0.30.2_aarch64.dmg)
-- **GUI App Zip**: [releases/artfultype-rs-mac.zip](releases/artfultype-rs-mac.zip)
-- **CLI Binary (`art`)**: [releases/artfultype-cli-mac-arm64](releases/artfultype-cli-mac-arm64)
+### Windows
+- **GUI Installer**: [releases/artfultype-rs_0.30.4_x64-setup.exe](releases/artfultype-rs_0.30.4_x64-setup.exe)
+- **CLI Executable**: [releases/artfultype-cli_0.30.4_x64.exe](releases/artfultype-cli_0.30.4_x64.exe)
 
-### Windows (x64)
+### macOS
+- **Universal App (Intel + Apple Silicon)**: [releases/ArtfulType_0.30.4_universal.dmg](releases/ArtfulType_0.30.4_universal.dmg)
 
-- **GUI Installer**: [releases/artfultype-rs_0.30.3_x64-setup.exe](releases/artfultype-rs_0.30.3_x64-setup.exe)
-- **Portable GUI Executable**: [releases/artfultype-rs-windows-x64.exe](releases/artfultype-rs-windows-x64.exe)
-- **CLI Executable (`art.exe`)**: [releases/artfultype-cli-windows-x64.exe](releases/artfultype-cli-windows-x64.exe)
-
-### Linux (AMD64)
-
-- **AppImage (compressed 7z)**: [releases/artfultype-rs_0.30.3_amd64.AppImage.7z](releases/artfultype-rs_0.30.3_amd64.AppImage.7z)
-- **Debian Package (`.deb`)**: [releases/artfultype-rs_0.30.3_amd64.deb](releases/artfultype-rs_0.30.3_amd64.deb)
-- **RPM Package (`.rpm`)**: [releases/artfultype-rs-0.30.3-1.x86_64.rpm](releases/artfultype-rs-0.30.3-1.x86_64.rpm)
-- **CLI Debian Package (`.deb`)**: [releases/artfultype-cli_0.30.3-1_amd64.deb](releases/artfultype-cli_0.30.3-1_amd64.deb)
+### Linux (Debian/Ubuntu/Fedora/AppImage)
+- **AppImage (compressed 7z)**: [releases/artfultype-rs_0.30.4_amd64.AppImage.7z](releases/artfultype-rs_0.30.4_amd64.AppImage.7z)
+- **Debian Package (`.deb`)**: [releases/artfultype-rs_0.30.4_amd64.deb](releases/artfultype-rs_0.30.4_amd64.deb)
+- **RPM Package (`.rpm`)**: [releases/artfultype-rs-0.30.4-1.x86_64.rpm](releases/artfultype-rs-0.30.4-1.x86_64.rpm)
+- **CLI Debian Package (`.deb`)**: [releases/artfultype-cli_0.30.4-1_amd64.deb](releases/artfultype-cli_0.30.4-1_amd64.deb)
 - **Raw Linux Binary**: [releases/artfultype-rs-linux-amd64](releases/artfultype-rs-linux-amd64)
 
 ```bash
 # Install Linux GUI .deb package:
-sudo dpkg -i releases/artfultype-rs_0.30.3_amd64.deb
+sudo dpkg -i releases/artfultype-rs_0.30.4_amd64.deb
 
 # Install Linux CLI .deb package (installs /usr/bin/art):
 sudo dpkg -i releases/artfultype-cli_0.30.3-1_amd64.deb

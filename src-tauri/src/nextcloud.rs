@@ -183,7 +183,7 @@ pub fn build_webdav_base_url(config: &NextcloudConfig) -> String {
     if !server.starts_with("http://") && !server.starts_with("https://") {
         server = format!("https://{server}");
     }
-    format!("{server}/remote.php/dav/files/{}/", config.username.trim())
+    format!("{server}/remote.php/webdav/")
 }
 
 pub fn build_webdav_url(config: &NextcloudConfig, relative_path: &str) -> String {
@@ -198,6 +198,7 @@ pub fn build_webdav_url(config: &NextcloudConfig, relative_path: &str) -> String
 
 fn create_webdav_client() -> Result<Client, String> {
     Client::builder()
+        .user_agent("ArtfulTypePro/0.30.3")
         .timeout(std::time::Duration::from_secs(15))
         // On Android, the system trust store is used automatically by reqwest/rustls
         .build()
@@ -220,12 +221,14 @@ pub fn test_connection_sync(config: &NextcloudConfig) -> Result<String, String> 
         .map_err(|e| format!("Connection failed: {e}"))?;
 
     let status = res.status();
+    let body_text = res.text().unwrap_or_default();
+    
     if status.is_success() || status.as_u16() == 207 {
         Ok(format!("Connected successfully to {}", config.server_url))
     } else if status.as_u16() == 401 {
-        Err("Authentication failed: Invalid username or app password".to_string())
+        Err(format!("Authentication failed (401): Invalid username/password. Server says: {}", body_text.trim()))
     } else {
-        Err(format!("Server returned HTTP status {}", status))
+        Err(format!("Server returned HTTP status {}: {}", status, body_text.trim()))
     }
 }
 
@@ -310,6 +313,8 @@ fn parse_webdav_propfind_xml(xml: &str, current_rel_path: &str, username: &str) 
             } else {
                 after_files.trim_matches('/').to_string()
             }
+        } else if let Some(idx) = href_lower.find("/remote.php/webdav/") {
+            decoded_href[idx + 19..].trim_matches('/').to_string()
         } else {
             decoded_href.trim_matches('/').to_string()
         };

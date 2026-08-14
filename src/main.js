@@ -89,15 +89,35 @@ function setDirty(dirty) {
   const f = getActiveFile();
   if (f) f.dirty = dirty;
   renderTabBar();
-  renderFileList();
   const btn = document.getElementById("save-file-btn");
-  if (!btn) return;
-  if (dirty) {
-    btn.classList.add("dirty");
-    btn.title = "Unsaved changes – Save (Ctrl+S)";
-  } else {
-    btn.classList.remove("dirty");
-    btn.title = "Save File (Ctrl+S)";
+  const ncBtn = document.getElementById("nc-save-file-btn");
+  const globalBtn = document.getElementById("global-save-btn");
+  if (btn) {
+    if (dirty) {
+      btn.classList.add("dirty");
+      btn.title = "Unsaved changes – Save (Ctrl+S)";
+    } else {
+      btn.classList.remove("dirty");
+      btn.title = "Save File (Ctrl+S)";
+    }
+  }
+  if (ncBtn) {
+    if (dirty) {
+      ncBtn.classList.add("dirty");
+      ncBtn.title = "Unsaved changes – Save (Ctrl+S)";
+    } else {
+      ncBtn.classList.remove("dirty");
+      ncBtn.title = "Save File (Ctrl+S)";
+    }
+  }
+  if (globalBtn) {
+    if (dirty) {
+      globalBtn.classList.add("dirty");
+      globalBtn.title = "Unsaved changes – Save (Ctrl+S)";
+    } else {
+      globalBtn.classList.remove("dirty");
+      globalBtn.title = "Save File (Ctrl+S)";
+    }
   }
 }
 
@@ -4051,6 +4071,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("toggle-mode-btn")?.addEventListener("click", toggleMode);
   document.getElementById("open-file-btn")?.addEventListener("click",   openFile);
   document.getElementById("save-file-btn")?.addEventListener("click",   () => saveFile());
+  document.getElementById("nc-save-file-btn")?.addEventListener("click", () => saveFile());
+  document.getElementById("global-save-btn")?.addEventListener("click", () => saveFile());
   document.getElementById("new-file-btn")?.addEventListener("click",    newFile);
 
   // ── Format toolbar ──
