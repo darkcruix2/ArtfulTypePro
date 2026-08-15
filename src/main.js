@@ -3217,6 +3217,7 @@ async function switchTab(id) {
   renderTabBar();
   renderFileList();
   if (typeof performFind === "function") performFind();
+  if (typeof closeSidebarDrawer === "function" && isTouchDevice()) closeSidebarDrawer();
 }
 
 function promptUnsavedChanges(file) {
@@ -3480,6 +3481,7 @@ async function applyOpenedFile(fileData) {
   setDirty(false);
   renderTabBar();
   renderFileList();
+  if (typeof closeSidebarDrawer === "function" && isTouchDevice()) closeSidebarDrawer();
 }
 
 async function openFile() {
@@ -3719,6 +3721,7 @@ function newFile() {
   renderTabBar();
   renderFileList();
   statusMessageEl.textContent = "New file";
+  if (typeof closeSidebarDrawer === "function" && isTouchDevice()) closeSidebarDrawer();
   if (!isMarkdownMode) writerViewEl.focus();
   else markdownInputEl.focus();
 }
@@ -5542,14 +5545,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Overlay tap closes drawer
   document.getElementById("sidebar-overlay")?.addEventListener("click", closeSidebarDrawer);
 
-  // Close drawer when a file item is tapped on mobile
-  document.getElementById("file-list")?.addEventListener("click", () => {
-    if (isTouchDevice()) setTimeout(closeSidebarDrawer, 80);
-  });
-  document.getElementById("nc-file-list")?.addEventListener("click", () => {
-    if (isTouchDevice()) setTimeout(closeSidebarDrawer, 80);
-  });
-
   // Bottom tab bar — Writer
   document.getElementById("mobile-tab-writer")?.addEventListener("click", () => {
     if (!isMarkdownMode) return; // already in writer mode
@@ -5585,4 +5580,106 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("toolbar")?.addEventListener("contextmenu", (e) => {
     if (isTouchDevice()) e.preventDefault();
   });
+});
+
+// ── Android background auto-save and close (>30s) ───────────────────────────
+let backgroundSaveTimer = null;
+let backgroundStartTime = null;
+
+async function saveAndCloseDirtyFiles() {
+  syncActiveFileContent();
+  const dirtyFiles = openFiles.filter(f => f.dirty);
+  if (dirtyFiles.length === 0) return;
+
+  let appDataDir = null;
+  try {
+    appDataDir = await invoke("get_files_dir");
+  } catch (e) {
+    console.warn("Could not get app data dir for background save:", e);
+  }
+
+  for (let i = openFiles.length - 1; i >= 0; i--) {
+    const f = openFiles[i];
+    if (!f.dirty) continue;
+
+    try {
+      if (f.isNextcloud && f.remotePath) {
+        await invoke("write_nextcloud_file", { path: f.remotePath, content: f.content });
+        f.dirty = false;
+        recordNcRecentFile(f.remotePath, f.remoteName || f.name.replace(/^☁\s*/, ""));
+      } else if (f.path) {
+        await invoke("save_file", { path: f.path, content: f.content });
+        f.dirty = false;
+      } else if (appDataDir) {
+        const targetPath = `${appDataDir}/${f.name}`;
+        await invoke("save_file", { path: targetPath, content: f.content });
+        f.path = targetPath;
+        f.id = targetPath;
+        f.dirty = false;
+        addToRecentFiles(targetPath, f.name);
+      }
+    } catch (err) {
+      console.error("Background auto-save failed for file:", f.name, err);
+    }
+
+    await closeTab(f.id);
+  }
+  renderTabBar();
+  renderFileList();
+  if (typeof renderNextcloudFileList === "function") renderNextcloudFileList();
+}
+
+function handleAppBackground() {
+  syncActiveFileContent();
+  if (backgroundSaveTimer) clearTimeout(backgroundSaveTimer);
+  backgroundStartTime = Date.now();
+  backgroundSaveTimer = setTimeout(async () => {
+    if (backgroundSaveTimer) {
+      clearTimeout(backgroundSaveTimer);
+      backgroundSaveTimer = null;
+    }
+    backgroundStartTime = null;
+    await saveAndCloseDirtyFiles();
+  }, 30000);
+}
+
+function handleAppForeground() {
+  if (backgroundStartTime) {
+    const elapsed = Date.now() - backgroundStartTime;
+    if (elapsed >= 30000) {
+      if (backgroundSaveTimer) {
+        clearTimeout(backgroundSaveTimer);
+        backgroundSaveTimer = null;
+      }
+      backgroundStartTime = null;
+      saveAndCloseDirtyFiles();
+    } else {
+      if (backgroundSaveTimer) {
+        clearTimeout(backgroundSaveTimer);
+        backgroundSaveTimer = null;
+      }
+      backgroundStartTime = null;
+    }
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    handleAppBackground();
+  } else if (document.visibilityState === "visible") {
+    handleAppForeground();
+  }
+});
+window.addEventListener("pagehide", () => {
+  handleAppBackground();
+});
+window.addEventListener("blur", () => {
+  if (isAndroid() || isTouchDevice()) {
+    handleAppBackground();
+  }
+});
+window.addEventListener("focus", () => {
+  if (isAndroid() || isTouchDevice()) {
+    handleAppForeground();
+  }
 });

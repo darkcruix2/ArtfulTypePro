@@ -103,11 +103,9 @@ async fn save_file_dialog(content: String) -> Option<String> {
     None
 }
 
-// ── Android file I/O ──────────────────────────────────────────────────────────
+// ── Shared file storage directory ─────────────────────────────────────────────
 
-/// Returns the app-private files directory on Android (equivalent to
-/// Context.getFilesDir()). The frontend uses this as the "local storage" root.
-#[cfg(target_os = "android")]
+/// Returns the app-private files directory (equivalent to Context.getFilesDir() on Android).
 #[tauri::command]
 fn get_files_dir(app: tauri::AppHandle) -> Result<String, String> {
     app.path()
@@ -353,6 +351,7 @@ pub fn run() {
             parse_markdown,
             get_platform,
             get_cli_args,
+            get_files_dir,
             save_file,
             read_file,
             list_dir,
