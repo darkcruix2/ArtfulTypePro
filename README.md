@@ -91,15 +91,10 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 
 ## Pre-built Releases (v0.30.4)
 
-Pre-compiled release binaries and packages are available in the `releases/` directory in this repository:
+Pre-compiled release binaries and packages are available in the `releases/` directory in this repository.
 
 ### Android
-## Pre-built Releases (v0.30.4)
-
-See the [releases/](releases/) directory for compiled binaries.
-
-### Android
-- **Android (Universal APK)**: [release/ArtfulTypePro-Android.apk](release/ArtfulTypePro-Android.apk)
+- **Android (Universal APK)**: [releases/ArtfulTypePro-release-signed.apk](releases/ArtfulTypePro-release-signed.apk)
 
 ### Windows
 - **GUI Installer**: [releases/artfultype-rs_0.30.4_x64-setup.exe](releases/artfultype-rs_0.30.4_x64-setup.exe)

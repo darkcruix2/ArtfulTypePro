@@ -149,8 +149,7 @@ function startAutoSave(intervalMinutes) {
       }
       const active = getActiveFile();
       if (active && !active.dirty) {
-        const btn = document.getElementById("save-file-btn");
-        if (btn) { btn.classList.remove("dirty"); btn.title = "Save File (Ctrl+S)"; }
+        setDirty(false);
       }
     }, intervalMinutes * 60 * 1000);
   }
@@ -466,6 +465,7 @@ function resolveNextcloudImagePath(src, docRemotePath) {
 }
 
 async function loadLocalImage(img, src) {
+  try { src = decodeURI(src); } catch (e) {}
   const active = getActiveFile();
   if (active && active.isNextcloud) {
     const ncPath = resolveNextcloudImagePath(src, active.remotePath);
@@ -2047,7 +2047,7 @@ function applyImageUpload() {
           
           const img = document.createElement("img");
           img.setAttribute("alt", imageName);
-          img.dataset.originalSrc = markdownPath;
+          img.dataset.originalSrc = encodeURI(markdownPath);
           img.className = "writer-image";
           img.setAttribute("src", "");
           
@@ -2064,7 +2064,7 @@ function applyImageUpload() {
         writerViewEl.focus();
         debouncedStats();
       } else {
-        const mdSnippet = `![${imageName}](${markdownPath})`;
+        const mdSnippet = `![${imageName}](${encodeURI(markdownPath)})`;
         const ta = markdownInputEl;
         const s = ta.selectionStart;
         ta.value = ta.value.slice(0, s) + mdSnippet + ta.value.slice(ta.selectionEnd);
@@ -3301,14 +3301,7 @@ async function switchTab(id) {
         updateStats(f.content || "");
       }
     }
-    const btn = document.getElementById("save-file-btn");
-    if (btn) {
-      if (f.dirty) {
-        btn.classList.add("dirty"); btn.title = "Unsaved changes – Save (Ctrl+S)";
-      } else {
-        btn.classList.remove("dirty"); btn.title = "Save File (Ctrl+S)";
-      }
-    }
+    setDirty(f.dirty);
   }
   renderTabBar();
   renderFileList();
@@ -3704,8 +3697,7 @@ async function saveFile(silent = false) {
     }
     const active = getActiveFile();
     if (active && !active.dirty) {
-      const btn = document.getElementById("save-file-btn");
-      if (btn) { btn.classList.remove("dirty"); btn.title = "Save File (Ctrl+S)"; }
+      setDirty(false);
     }
   } catch (e) {
     console.error(e);
@@ -3742,9 +3734,7 @@ async function saveFileAs(silent = false) {
       f.dirty = false;
       renderTabBar(); renderFileList();
       if (!silent) statusMessageEl.textContent = `Saved: ${f.name}`;
-      
-      const btn = document.getElementById("save-file-btn");
-      if (btn) { btn.classList.remove("dirty"); btn.title = "Save File (Ctrl+S)"; }
+      setDirty(false);
     } else {
       if (!silent) statusMessageEl.textContent = "Save cancelled.";
     }

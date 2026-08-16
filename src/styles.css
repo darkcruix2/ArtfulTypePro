@@ -1416,13 +1416,17 @@ sup {
 /* ── Dirty / unsaved indicator ─────────────────────────────────────────────── */
 
 /* Save button when there are unsaved changes */
-#save-file-btn.dirty {
+#save-file-btn.dirty,
+#nc-save-file-btn.dirty,
+#global-save-btn.dirty {
   color: var(--red);
   position: relative;
 }
 
 /* Animated red dot badge on the save button when dirty */
-#save-file-btn.dirty::after {
+#save-file-btn.dirty::after,
+#nc-save-file-btn.dirty::after,
+#global-save-btn.dirty::after {
   content: "";
   position: absolute;
   top: 4px;
