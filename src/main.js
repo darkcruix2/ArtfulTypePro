@@ -1988,6 +1988,102 @@ function applyLink() {
   }
 }
 
+function applyImageUpload() {
+  const active = getActiveFile();
+  if (!active) {
+    statusMessageEl.textContent = "No file is currently open.";
+    return;
+  }
+  
+  if (active.id.startsWith("untitled")) {
+    statusMessageEl.textContent = "Please save the document first to upload images.";
+    return;
+  }
+
+  const fileInput = document.getElementById("image-upload-input");
+  fileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(buffer));
+      
+      const docName = active.name.replace(/^☁\s*/, "").replace(/\.md$/i, "");
+      const imageName = file.name || `image_${Date.now()}.png`;
+      let imagePath = "";
+      let markdownPath = "";
+
+      if (active.isNextcloud) {
+        const remotePath = active.remotePath || "";
+        const lastSlash = remotePath.lastIndexOf("/");
+        const parentPath = lastSlash !== -1 ? remotePath.substring(0, lastSlash) : "";
+        const folderPath = parentPath ? `${parentPath}/${docName}` : docName;
+        imagePath = `${folderPath}/${imageName}`;
+        markdownPath = `${docName}/${imageName}`;
+
+        try {
+          await invoke("create_nextcloud_folder", { path: folderPath });
+        } catch (err) {}
+        await invoke("write_nextcloud_binary_file", { path: imagePath, content: bytes });
+      } else {
+        const localPath = active.path;
+        const separator = localPath.includes("\\") ? "\\" : "/";
+        const lastSlash = localPath.lastIndexOf(separator);
+        const parentPath = lastSlash !== -1 ? localPath.substring(0, lastSlash) : "";
+        const folderPath = parentPath ? `${parentPath}${separator}${docName}` : docName;
+        imagePath = `${folderPath}${separator}${imageName}`;
+        markdownPath = `${docName}/${imageName}`;
+
+        await invoke("save_binary_file", { path: imagePath, content: bytes });
+      }
+
+      if (!isMarkdownMode) {
+        restoreSelection();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          
+          const img = document.createElement("img");
+          img.setAttribute("alt", imageName);
+          img.dataset.originalSrc = markdownPath;
+          img.className = "writer-image";
+          img.setAttribute("src", "");
+          
+          range.insertNode(img);
+          range.setStartAfter(img);
+          range.setEndAfter(img);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          
+          if (typeof loadLocalImage === "function") {
+            loadLocalImage(img, markdownPath);
+          }
+        }
+        writerViewEl.focus();
+        debouncedStats();
+      } else {
+        const mdSnippet = `![${imageName}](${markdownPath})`;
+        const ta = markdownInputEl;
+        const s = ta.selectionStart;
+        ta.value = ta.value.slice(0, s) + mdSnippet + ta.value.slice(ta.selectionEnd);
+        ta.selectionStart = ta.selectionEnd = s + mdSnippet.length;
+        ta.focus();
+        debouncedStats();
+      }
+      
+      statusMessageEl.textContent = `Image uploaded to ${docName}/${imageName}`;
+    } catch (err) {
+      console.error("Upload error", err);
+      statusMessageEl.textContent = "Failed to upload image.";
+    } finally {
+      fileInput.value = "";
+    }
+  };
+  fileInput.click();
+}
+
 function applyBlockquote() {
   if (!isMarkdownMode) {
     restoreSelection();
@@ -4085,6 +4181,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sub-btn")?.addEventListener("click",       () => applySubscript());
   document.getElementById("sup-btn")?.addEventListener("click",       () => applySuperscript());
   document.getElementById("link-btn")?.addEventListener("click",      () => applyLink());
+  document.getElementById("image-btn")?.addEventListener("click",     () => applyImageUpload());
   document.getElementById("code-btn")?.addEventListener("click",   () => applyCode());
   document.getElementById("undo-btn")?.addEventListener("click",   doUndo);
   document.getElementById("redo-btn")?.addEventListener("click",   doRedo);
@@ -4248,6 +4345,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("tui-fmt-sub")?.addEventListener("click", () => { closeAllTuiMenus(); applySubscript(); });
   document.getElementById("tui-fmt-sup")?.addEventListener("click", () => { closeAllTuiMenus(); applySuperscript(); });
   document.getElementById("tui-fmt-link")?.addEventListener("click", () => { closeAllTuiMenus(); applyLink(); });
+  document.getElementById("tui-fmt-image")?.addEventListener("click", () => { closeAllTuiMenus(); applyImageUpload(); });
   document.getElementById("tui-fmt-ul")?.addEventListener("click", () => { closeAllTuiMenus(); applyUnorderedList(); });
   document.getElementById("tui-fmt-ol")?.addEventListener("click", () => { closeAllTuiMenus(); applyOrderedList(); });
   document.getElementById("tui-fmt-task")?.addEventListener("click", () => { closeAllTuiMenus(); applyTaskList(); });

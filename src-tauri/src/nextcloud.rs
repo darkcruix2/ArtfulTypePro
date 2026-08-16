@@ -498,6 +498,46 @@ pub async fn write_file(config: NextcloudConfig, relative_path: String, content:
     maybe_spawn_blocking!(write_file_sync(&config, &relative_path, &content))
 }
 
+pub fn write_binary_file_sync(config: &NextcloudConfig, relative_path: &str, content: Vec<u8>) -> Result<(), String> {
+    let client = create_webdav_client()?;
+    let url = build_webdav_url(config, relative_path);
+
+    let ext = std::path::Path::new(relative_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png"  => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif"  => "image/gif",
+        "webp" => "image/webp",
+        "svg"  => "image/svg+xml",
+        "bmp"  => "image/bmp",
+        "ico"  => "image/x-icon",
+        "avif" => "image/avif",
+        _      => "application/octet-stream",
+    };
+
+    let res = client
+        .put(&url)
+        .basic_auth(&config.username, Some(&config.password))
+        .header("Content-Type", mime)
+        .body(content)
+        .send()
+        .map_err(|e| format!("Failed to save remote file: {e}"))?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP error {} saving file {}", res.status(), relative_path));
+    }
+
+    Ok(())
+}
+
+pub async fn write_binary_file(config: NextcloudConfig, relative_path: String, content: Vec<u8>) -> Result<(), String> {
+    maybe_spawn_blocking!(write_binary_file_sync(&config, &relative_path, content))
+}
+
 pub fn delete_entry_sync(config: &NextcloudConfig, relative_path: &str) -> Result<(), String> {
     let client = create_webdav_client()?;
     let url = build_webdav_url(config, relative_path);

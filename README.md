@@ -89,7 +89,7 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 
 ---
 
-## Pre-built Releases (v0.30.3)
+## Pre-built Releases (v0.30.4)
 
 Pre-compiled release binaries and packages are available in the `releases/` directory in this repository:
 
@@ -120,7 +120,7 @@ See the [releases/](releases/) directory for compiled binaries.
 sudo dpkg -i releases/artfultype-rs_0.30.4_amd64.deb
 
 # Install Linux CLI .deb package (installs /usr/bin/art):
-sudo dpkg -i releases/artfultype-cli_0.30.3-1_amd64.deb
+sudo dpkg -i releases/artfultype-cli_0.30.4-1_amd64.deb
 ```
 
 ---

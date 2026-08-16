@@ -127,6 +127,16 @@ fn save_file(path: &str, content: &str) -> Result<(), String> {
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn save_binary_file(path: &str, content: Vec<u8>) -> Result<(), String> {
+    if let Some(parent) = Path::new(path).parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("Cannot create dir: {e}"))?;
+        }
+    }
+    fs::write(path, content).map_err(|e| e.to_string())
+}
+
 /// Opens a file by absolute path without showing a dialog.
 /// Used by the recent-files list and the Android file browser.
 #[tauri::command]
@@ -307,6 +317,13 @@ async fn write_nextcloud_file(app: tauri::AppHandle, path: String, content: Stri
 }
 
 #[tauri::command]
+async fn write_nextcloud_binary_file(app: tauri::AppHandle, path: String, content: Vec<u8>) -> Result<(), String> {
+    let cfg = crate::nextcloud::load_config(Some(&app))
+        .ok_or_else(|| "Nextcloud is not linked".to_string())?;
+    crate::nextcloud::write_binary_file(cfg, path, content).await
+}
+
+#[tauri::command]
 async fn delete_nextcloud_entry(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let cfg = crate::nextcloud::load_config(Some(&app))
         .ok_or_else(|| "Nextcloud is not linked".to_string())?;
@@ -353,6 +370,7 @@ pub fn run() {
             get_cli_args,
             get_files_dir,
             save_file,
+            save_binary_file,
             read_file,
             list_dir,
             read_image_base64,
@@ -366,6 +384,7 @@ pub fn run() {
             read_nextcloud_file,
             read_nextcloud_image_base64,
             write_nextcloud_file,
+            write_nextcloud_binary_file,
             delete_nextcloud_entry,
             create_nextcloud_folder,
         ]);

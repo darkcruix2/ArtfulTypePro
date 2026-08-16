@@ -208,6 +208,10 @@
             <button id="link-btn" class="icon-btn fmt-btn" title="Insert Link (Ctrl+L)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </button>
+            <button id="image-btn" class="icon-btn fmt-btn" title="Insert Image (Upload)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </button>
+            <input type="file" id="image-upload-input" accept="image/*" style="display: none;" />
           </div>
 
           <div class="toolbar-sep"></div>
@@ -372,6 +376,7 @@
       <button id="tui-fmt-sub" class="menu-item"><span>X₂ Subscript</span><kbd>Ctrl+Shift+B</kbd></button>
       <button id="tui-fmt-sup" class="menu-item"><span>X² Superscript</span><kbd>Ctrl+Shift+P</kbd></button>
       <button id="tui-fmt-link" class="menu-item"><span>🔗 Link</span><kbd>Ctrl+L</kbd></button>
+      <button id="tui-fmt-image" class="menu-item"><span>🖼 Image (Upload)</span></button>
       <hr class="modal-sep" />
       <div class="menu-header">Lists & Blocks</div>
       <button id="tui-fmt-ul" class="menu-item"><span>• Bullet List</span></button>
