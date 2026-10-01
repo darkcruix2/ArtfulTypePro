@@ -3,11 +3,15 @@
 # Targets:
 #   make             – build release binary (same as 'make build')
 #   make build       – compile release binary via cargo tauri build
-#   make deb         – build .deb package (requires tauri-cli)
+#   make deb         – build .deb package for host arch (x86-64)
+#   make deb-arm64   – cross-compile GUI .deb for aarch64 (CM4 / uConsole / RPi)
+#   make deb-cli     – build CLI (art) .deb for host arch (x86-64)
+#   make deb-cli-arm64 – cross-compile CLI (art) .deb for aarch64
 #   make install     – install binary + assets to system paths (requires sudo)
 #   make uninstall   – remove installed files (requires sudo)
 #   make clean       – remove build artefacts
-#   make deps        – install Debian build dependencies
+#   make deps        – install Debian build dependencies (host / x86-64)
+#   make deps-arm64  – install ARM64 cross-compilation toolchain
 #   make check       – run cargo check only (fast compile check, no bundle)
 
 # ─── Metadata ────────────────────────────────────────────────────────────────
@@ -42,7 +46,7 @@ CP          := cp -r
 
 # ─────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := build
-.PHONY: all build deb install uninstall clean deps check \
+.PHONY: all build deb deb-arm64 deb-cli deb-cli-arm64 install uninstall clean deps deps-arm64 check \
         android-setup android-dev android-build android-check
 
 # ─── Build release binary ─────────────────────────────────────────────────────
@@ -53,12 +57,137 @@ build:
 	$(CARGO_TAURI) build --no-bundle
 	@echo "✓ Binary: $(BINARY)"
 
-# ─── Build .deb package ───────────────────────────────────────────────────────
+# ─── Build .deb package (host arch — x86-64) ─────────────────────────────────
 deb:
-	@echo "→ Building $(APP_NAME) .deb package…"
+	@echo "→ Building $(APP_NAME) .deb package ($(shell dpkg --print-architecture))…"
 	$(CARGO_TAURI) build --bundles deb
 	@echo "✓ Package(s):"
 	@ls -1 $(DEB_DIR)/*.deb 2>/dev/null || echo "  (no .deb found — check build output above)"
+
+# ─── Build .deb package for ARM64 (aarch64 — CM4 / uConsole / RPi) ───────────
+#
+# Strategy:
+#   1. Cross-compile the Rust binary for aarch64-unknown-linux-gnu using the
+#      GCC cross-linker (no Docker required — uses system gcc-aarch64-linux-gnu).
+#   2. Build the normal x86-64 Tauri bundle to let Tauri generate the .deb
+#      directory scaffold with all metadata, desktop files and icons.
+#   3. Repackage: swap the x86-64 binary for the aarch64 one, patch the
+#      'Architecture' field in DEBIAN/control, and call dpkg-deb.
+#
+# The result lands in $(DEB_DIR)/ with an _arm64 suffix.
+#
+ARM64_TARGET    := aarch64-unknown-linux-gnu
+ARM64_CROSS_CC  := aarch64-linux-gnu-gcc
+ARM64_BINARY    := $(TAURI_SRC)/target/$(ARM64_TARGET)/release/$(APP_NAME)
+ARM64_WORK_DIR  := /tmp/$(APP_NAME)-arm64-pkg
+ARM64_DEB_STEM  := $(APP_NAME)_$(APP_VERSION)_arm64
+ARM64_DEB_OUT   := $(DEB_DIR)/$(ARM64_DEB_STEM).deb
+
+deb-arm64: _arm64-check-tools
+	@echo "→ Cross-compiling $(APP_NAME) for $(ARM64_TARGET)…"
+	# Ensure the Rust target is installed
+	rustup target add $(ARM64_TARGET)
+	# Cross-compile (linker is set via .cargo/config.toml or inline env)
+	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=$(ARM64_CROSS_CC) \
+	  cargo build \
+	    --manifest-path $(TAURI_SRC)/Cargo.toml \
+	    --release \
+	    --target $(ARM64_TARGET) \
+	    --no-default-features
+	@echo "→ Building x86-64 Tauri .deb scaffold for metadata…"
+	$(CARGO_TAURI) build --bundles deb 2>/dev/null || true
+	@# Locate the freshest x86-64 .deb to use as the scaffold
+	$(eval X86_DEB := $(shell ls -t $(DEB_DIR)/$(APP_NAME)_$(APP_VERSION)*.deb 2>/dev/null \
+	  | grep -v arm64 | head -1))
+	@test -n "$(X86_DEB)" || (echo "ERROR: no x86-64 .deb scaffold found in $(DEB_DIR)/"; exit 1)
+	@echo "→ Repackaging as arm64 .deb using scaffold: $(X86_DEB)"
+	rm -rf $(ARM64_WORK_DIR)
+	dpkg-deb -R $(X86_DEB) $(ARM64_WORK_DIR)
+	# Replace binary with ARM64 build
+	cp -f $(ARM64_BINARY) $(ARM64_WORK_DIR)/usr/bin/$(APP_NAME)
+	file $(ARM64_WORK_DIR)/usr/bin/$(APP_NAME)
+	# Patch control metadata
+	sed -i 's/^Architecture:.*/Architecture: arm64/' $(ARM64_WORK_DIR)/DEBIAN/control
+	sed -i 's/^Installed-Size:.*//' $(ARM64_WORK_DIR)/DEBIAN/control
+	# Recalculate installed size (kB)
+	$(eval ARM64_SIZE_KB := $(shell du -sk $(ARM64_WORK_DIR) | cut -f1))
+	sed -i '/^$$/d' $(ARM64_WORK_DIR)/DEBIAN/control
+	echo "Installed-Size: $(ARM64_SIZE_KB)" >> $(ARM64_WORK_DIR)/DEBIAN/control
+	# Repack
+	mkdir -p $(DEB_DIR)
+	dpkg-deb --build --root-owner-group $(ARM64_WORK_DIR) $(ARM64_DEB_OUT)
+	rm -rf $(ARM64_WORK_DIR)
+	@echo "✓ ARM64 package: $(ARM64_DEB_OUT)"
+	@ls -lh $(ARM64_DEB_OUT)
+
+# Internal target — verify required cross-build tools are present
+_arm64-check-tools:
+	@command -v $(ARM64_CROSS_CC) >/dev/null 2>&1 || \
+	  (echo "ERROR: $(ARM64_CROSS_CC) not found. Run: make deps-arm64"; exit 1)
+	@command -v dpkg-deb >/dev/null 2>&1 || \
+	  (echo "ERROR: dpkg-deb not found. Install dpkg package."; exit 1)
+	@rustup target list --installed | grep -q $(ARM64_TARGET) || rustup target add $(ARM64_TARGET)
+
+# ─── Build CLI (art) .deb — host arch (x86-64) ───────────────────────────────
+CLI_NAME        := artfultype-cli
+CLI_BINARY_HOST := $(TAURI_SRC)/target/release/art
+CLI_DEB_WORK    := /tmp/$(CLI_NAME)-pkg
+CLI_DEB_HOST    := releases/$(CLI_NAME)_$(APP_VERSION)-1_$(shell dpkg --print-architecture).deb
+CLI_AMD64_REF   := $(shell ls -t releases/$(CLI_NAME)_*_amd64.deb 2>/dev/null | head -1)
+
+deb-cli:
+	@echo "→ Building $(CLI_NAME) (host arch)…"
+	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=$(ARM64_CROSS_CC) \
+	  cargo build \
+	    --manifest-path $(TAURI_SRC)/Cargo.toml \
+	    --release --bin art --features tui
+	@test -f "$(CLI_BINARY_HOST)" || (echo "ERROR: art binary not found"; exit 1)
+	rm -rf $(CLI_DEB_WORK)
+	dpkg-deb -R "$(CLI_AMD64_REF)" $(CLI_DEB_WORK)
+	cp -f $(CLI_BINARY_HOST) $(CLI_DEB_WORK)/usr/bin/art
+	chmod 755 $(CLI_DEB_WORK)/usr/bin/art
+	sed -i "s/^Architecture:.*/Architecture: $(shell dpkg --print-architecture)/" $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i "s/^Version:.*/Version: $(APP_VERSION)-1/" $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i 's/^Installed-Size:.*//' $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i '/^$$/d' $(CLI_DEB_WORK)/DEBIAN/control
+	echo "Installed-Size: $$(du -sk $(CLI_DEB_WORK) | cut -f1)" >> $(CLI_DEB_WORK)/DEBIAN/control
+	mkdir -p releases
+	dpkg-deb --build --root-owner-group $(CLI_DEB_WORK) $(CLI_DEB_HOST)
+	rm -rf $(CLI_DEB_WORK)
+	@echo "✓ CLI package: $(CLI_DEB_HOST)"
+	@ls -lh $(CLI_DEB_HOST)
+
+# ─── Build CLI (art) .deb — ARM64 (aarch64 / CM4 / uConsole / RPi) ───────────
+CLI_BINARY_ARM64 := $(TAURI_SRC)/target/$(ARM64_TARGET)/release/art
+CLI_DEB_ARM64    := releases/$(CLI_NAME)_$(APP_VERSION)-1_arm64.deb
+
+deb-cli-arm64: _arm64-check-tools
+	@echo "→ Cross-compiling $(CLI_NAME) for $(ARM64_TARGET)…"
+	PKG_CONFIG_SYSROOT_DIR=/ \
+	PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+	PKG_CONFIG_ALLOW_CROSS=1 \
+	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=$(ARM64_CROSS_CC) \
+	  cargo build \
+	    --manifest-path $(TAURI_SRC)/Cargo.toml \
+	    --release --target $(ARM64_TARGET) --bin art --features tui
+	@test -f "$(CLI_BINARY_ARM64)" || (echo "ERROR: arm64 art binary not found"; exit 1)
+	$(eval CLI_AMD64_REF := $(shell ls -t releases/$(CLI_NAME)_*_amd64.deb 2>/dev/null | head -1))
+	@test -n "$(CLI_AMD64_REF)" || (echo "ERROR: no amd64 CLI .deb scaffold in releases/"; exit 1)
+	rm -rf $(CLI_DEB_WORK)
+	dpkg-deb -R "$(CLI_AMD64_REF)" $(CLI_DEB_WORK)
+	cp -f $(CLI_BINARY_ARM64) $(CLI_DEB_WORK)/usr/bin/art
+	chmod 755 $(CLI_DEB_WORK)/usr/bin/art
+	file $(CLI_DEB_WORK)/usr/bin/art
+	sed -i 's/^Architecture:.*/Architecture: arm64/' $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i "s/^Version:.*/Version: $(APP_VERSION)-1/" $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i 's/^Installed-Size:.*//' $(CLI_DEB_WORK)/DEBIAN/control
+	sed -i '/^$$/d' $(CLI_DEB_WORK)/DEBIAN/control
+	echo "Installed-Size: $$(du -sk $(CLI_DEB_WORK) | cut -f1)" >> $(CLI_DEB_WORK)/DEBIAN/control
+	mkdir -p releases
+	dpkg-deb --build --root-owner-group $(CLI_DEB_WORK) $(CLI_DEB_ARM64)
+	rm -rf $(CLI_DEB_WORK)
+	@echo "✓ CLI ARM64 package: $(CLI_DEB_ARM64)"
+	@ls -lh $(CLI_DEB_ARM64)
 
 # ─── Install (requires sudo / root) ──────────────────────────────────────────
 install: build
@@ -111,7 +240,7 @@ clean:
 	cargo clean --manifest-path $(TAURI_SRC)/Cargo.toml
 	@echo "✓ Clean"
 
-# ─── Install Debian build dependencies ────────────────────────────────────────
+# ─── Install Debian build dependencies (host / x86-64) ───────────────────────
 deps:
 	@echo "→ Installing build dependencies…"
 	sudo apt-get update
@@ -131,6 +260,22 @@ deps:
 	@# Install tauri-cli if not present
 	@command -v cargo-tauri >/dev/null 2>&1 || cargo install tauri-cli
 	@echo "✓ Dependencies ready"
+
+# ─── Install ARM64 cross-compilation toolchain ────────────────────────────────
+deps-arm64:
+	@echo "→ Installing ARM64 (aarch64) cross-compilation toolchain…"
+	sudo apt-get update
+	sudo apt-get install -y \
+		gcc-aarch64-linux-gnu \
+		binutils-aarch64-linux-gnu \
+		dpkg-dev \
+		file
+	@# Add Rust aarch64 target
+	rustup target add aarch64-unknown-linux-gnu
+	@echo "✓ ARM64 cross-compilation toolchain ready"
+	@echo "  Cross-compiler: $$(which aarch64-linux-gnu-gcc)"
+	@echo "  Rust target:    aarch64-unknown-linux-gnu"
+	@echo "  Now run: make deb-arm64"
 
 # ─── Fast check (no link, no bundle) ──────────────────────────────────────────
 check:
