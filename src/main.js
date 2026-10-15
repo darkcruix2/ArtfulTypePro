@@ -1175,9 +1175,12 @@ async function renderMermaidBlock(block) {
     errEl.textContent = `Mermaid syntax error: ${err?.message || err}`;
     block.classList.add("has-error");
   } finally {
-    // Mermaid may leave temporary render containers in <body> on failure
-    document.getElementById(id)?.remove();
-    document.getElementById(`d${id}`)?.remove();
+    // Mermaid may leave temporary render containers in <body> on failure.
+    // NOTE: the rendered <svg> itself carries `id`, so never remove it from our block.
+    [id, `d${id}`].forEach(x => {
+      const el = document.getElementById(x);
+      if (el && !block.contains(el)) el.remove();
+    });
   }
 }
 
@@ -1263,6 +1266,71 @@ async function enhanceWriterMermaid(container = writerViewEl) {
     jobs.push(renderMermaidBlock(block));
   });
   await Promise.all(jobs);
+}
+
+/** Extract source text from a <pre> (handles <br>/<div> line structure). */
+function getPreSourceText(pre) {
+  const md = nodeToMd(pre).trim();          // "```lang\n...\n```"
+  return md.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "");
+}
+
+/** Replace a writer <pre><code class="language-mermaid"> with a rendered diagram. */
+function convertPreToMermaid(pre) {
+  if (!pre || !pre.parentNode) return false;
+  const code = pre.querySelector("code");
+  const lang = (code?.className || "").replace(/language-/, "").trim().toLowerCase();
+  if (lang !== "mermaid") return false;
+  const block = createMermaidBlock(getPreSourceText(pre));
+  pre.replaceWith(block);
+  let next = block.nextElementSibling;
+  if (!next) {
+    next = document.createElement("p");
+    next.appendChild(document.createElement("br"));
+    block.after(next);
+  }
+  renderMermaidBlock(block);
+  placeCaret(next, 0);
+  writerViewEl.focus();
+  setDirty(true);
+  debouncedStats();
+  return true;
+}
+
+/** Writer paste: Markdown text containing a ```mermaid fence is rendered instead of pasted raw. */
+async function handleWriterMermaidPaste(e) {
+  if (isMarkdownMode) return;
+  if (e.target.closest?.(".mermaid-source-editor")) return;
+  const text = e.clipboardData?.getData("text/plain") || "";
+  if (!/^\s*```\s*mermaid\b/im.test(text)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  // Normalise indented fences so the Markdown parser recognises them
+  const md = text.replace(/^[ \t]+(```)/gm, "$1");
+  const tmp = document.createElement("div");
+  tmp.innerHTML = await invoke("parse_markdown", { text: md });
+  applySyntaxHighlighting(tmp);
+  await enhanceWriterMermaid(tmp);
+  const nodes = Array.from(tmp.childNodes);
+  const anchor = range && writerViewEl.contains(range.startContainer)
+    ? getBlockAncestor(range.startContainer) : null;
+  if (anchor && anchor.parentNode && anchor !== writerViewEl) {
+    const isEmpty = !anchor.textContent.replace(/\u200B/g, "").trim();
+    let ref = anchor;
+    nodes.forEach(n => { ref.after(n); ref = n; });
+    if (isEmpty) anchor.remove();
+  } else {
+    nodes.forEach(n => writerViewEl.appendChild(n));
+  }
+  const last = writerViewEl.lastElementChild;
+  if (last && last.classList.contains("mermaid-block")) {
+    const p = document.createElement("p");
+    p.appendChild(document.createElement("br"));
+    writerViewEl.appendChild(p);
+  }
+  setDirty(true);
+  debouncedStats();
 }
 
 function insertMermaidFlowchart() {
@@ -3047,6 +3115,7 @@ function getLineTextBeforeCaret(range, block) {
  */
 function closeCodeBlock(pre) {
   hideCodeControls();
+  if (convertPreToMermaid(pre)) return;
   applySyntaxHighlighting(pre);
 
   // <p><br></p> is the browser-standard structure for an empty editable paragraph.
@@ -3088,6 +3157,7 @@ const SUPPORTED_LANGUAGES = [
   { label: "JavaScript", value: "js" },
   { label: "Make", value: "make" },
   { label: "Markdown", value: "markdown" },
+  { label: "Mermaid Diagram", value: "mermaid" },
   { label: "Python", value: "python" },
   { label: "SQL", value: "sql" },
   { label: "TeX / LaTeX", value: "tex" },
@@ -3132,6 +3202,12 @@ function ensureCodeControls() {
       code.className = `language-${selectedLang}`;
     } else {
       code.className = "";
+    }
+    if (selectedLang === "mermaid") {
+      const pre = _activePre;
+      hideCodeControls();
+      convertPreToMermaid(pre);
+      return;
     }
     // Re-apply syntax highlighting with new language selection
     applySyntaxHighlighting(_activePre);
@@ -4357,6 +4433,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sup-btn")?.addEventListener("click",       () => applySuperscript());
   document.getElementById("link-btn")?.addEventListener("click",      () => applyLink());
   document.getElementById("mermaid-btn")?.addEventListener("click",   () => insertMermaidFlowchart());
+  writerViewEl?.addEventListener("paste", handleWriterMermaidPaste, true);
   document.getElementById("image-btn")?.addEventListener("click",     () => applyImageUpload());
   document.getElementById("code-btn")?.addEventListener("click",   () => applyCode());
   document.getElementById("undo-btn")?.addEventListener("click",   doUndo);
