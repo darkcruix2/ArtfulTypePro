@@ -825,7 +825,8 @@ function nodeToMd(node, insideBlock = false) {
       if (node.classList.contains("footnotes")) return "";
       if (node.classList.contains("mermaid-block")) {
         const src = (node.dataset.mermaidSource || "").replace(/^\n+|\s+$/g, "");
-        return `\n\n\`\`\`mermaid\n${src}\n\`\`\`\n\n`;
+        const fenceLang = node.dataset.mermaidFence ?? "mermaid";
+        return `\n\n\`\`\`${fenceLang}\n${src}\n\`\`\`\n\n`;
       }
       const inner = children();
       return inner.endsWith("\n") ? inner : inner + "\n";
@@ -1256,13 +1257,27 @@ function toggleMermaidEditor(block, forceOpen = false) {
   editor.focus();
 }
 
+// Diagram keywords that may start a Mermaid definition (used for untagged ``` fences)
+const MERMAID_START_RE = /^(%%\{\s*init|(flowchart|graph)\s+(TB|TD|BT|RL|LR)\b|(flowchart|graph)\s*;?\s*$|sequenceDiagram\s*$|classDiagram(-v2)?\s*$|stateDiagram(-v2)?\s*$|erDiagram\s*$|journey\s*$|gantt\s*$|pie(\s+(showData|title\b.*))?\s*$|quadrantChart\s*$|requirementDiagram\s*$|gitGraph\b|C4(Context|Container|Component|Dynamic|Deployment)\s*$|mindmap\s*$|timeline\s*$|sankey-beta\s*$|xychart-beta\b|block-beta\s*$|packet-beta\s*$|kanban\s*$|architecture-beta\s*$|radar-beta\s*$|treemap-beta\s*$)/;
+
+/** Heuristic: does an untagged code block contain a Mermaid diagram? */
+function looksLikeMermaid(src) {
+  const first = (src || "").split("\n")
+    .map(l => l.trim())
+    .find(l => l && !(l.startsWith("%%") && !l.startsWith("%%{")));
+  return !!first && MERMAID_START_RE.test(first);
+}
+
 async function enhanceWriterMermaid(container = writerViewEl) {
-  const codes = container.querySelectorAll("pre > code.language-mermaid");
   const jobs = [];
-  codes.forEach(codeEl => {
-    const pre = codeEl.parentElement;
-    const block = createMermaidBlock(codeEl.textContent.replace(/\n$/, ""));
-    pre.replaceWith(block);
+  container.querySelectorAll("pre > code").forEach(codeEl => {
+    const lang = codeEl.className.replace(/language-/, "").trim().toLowerCase();
+    const text = codeEl.textContent.replace(/\n$/, "");
+    const isTagged = lang === "mermaid";
+    if (!isTagged && (lang || !looksLikeMermaid(text))) return;
+    const block = createMermaidBlock(text);
+    if (!isTagged) block.dataset.mermaidFence = ""; // keep the original bare ``` on save
+    codeEl.parentElement.replaceWith(block);
     jobs.push(renderMermaidBlock(block));
   });
   await Promise.all(jobs);
@@ -1279,8 +1294,11 @@ function convertPreToMermaid(pre) {
   if (!pre || !pre.parentNode) return false;
   const code = pre.querySelector("code");
   const lang = (code?.className || "").replace(/language-/, "").trim().toLowerCase();
-  if (lang !== "mermaid") return false;
-  const block = createMermaidBlock(getPreSourceText(pre));
+  const src = getPreSourceText(pre);
+  const isTagged = lang === "mermaid";
+  if (!isTagged && (lang || !looksLikeMermaid(src))) return false;
+  const block = createMermaidBlock(src);
+  if (!isTagged) block.dataset.mermaidFence = "";
   pre.replaceWith(block);
   let next = block.nextElementSibling;
   if (!next) {
@@ -1301,13 +1319,18 @@ async function handleWriterMermaidPaste(e) {
   if (isMarkdownMode) return;
   if (e.target.closest?.(".mermaid-source-editor")) return;
   const text = e.clipboardData?.getData("text/plain") || "";
-  if (!/^\s*```\s*mermaid\b/im.test(text)) return;
+  const hasFence = /^\s*```\s*(mermaid\b|\n\s*(%%\{|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|journey))/im.test(text);
+  const isRawDiagram = !hasFence && !/^\s*```/m.test(text) && text.includes("\n") && looksLikeMermaid(text);
+  if (!hasFence && !isRawDiagram) return;
   e.preventDefault();
   e.stopPropagation();
   const sel = window.getSelection();
   const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
-  // Normalise indented fences so the Markdown parser recognises them
-  const md = text.replace(/^[ \t]+(```)/gm, "$1");
+  // Normalise indented fences so the Markdown parser recognises them;
+  // wrap raw diagram text in a fence.
+  const md = isRawDiagram
+    ? "```mermaid\n" + text.replace(/\s+$/, "") + "\n```\n"
+    : text.replace(/^[ \t]+(```)/gm, "$1");
   const tmp = document.createElement("div");
   tmp.innerHTML = await invoke("parse_markdown", { text: md });
   applySyntaxHighlighting(tmp);
