@@ -16,7 +16,7 @@
 
 # ─── Metadata ────────────────────────────────────────────────────────────────
 APP_NAME    := artfultype-rs
-APP_VERSION := 0.30.4
+APP_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
 APP_DESC    := "ArtfulType Pro — Dracula-themed Markdown / Writer editor"
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -88,6 +88,9 @@ deb-arm64: _arm64-check-tools
 	# Ensure the Rust target is installed
 	rustup target add $(ARM64_TARGET)
 	# Cross-compile (linker is set via .cargo/config.toml or inline env)
+	PKG_CONFIG_SYSROOT_DIR=/ \
+	PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+	PKG_CONFIG_ALLOW_CROSS=1 \
 	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=$(ARM64_CROSS_CC) \
 	  cargo build \
 	    --manifest-path $(TAURI_SRC)/Cargo.toml \
@@ -109,10 +112,9 @@ deb-arm64: _arm64-check-tools
 	# Patch control metadata
 	sed -i 's/^Architecture:.*/Architecture: arm64/' $(ARM64_WORK_DIR)/DEBIAN/control
 	sed -i 's/^Installed-Size:.*//' $(ARM64_WORK_DIR)/DEBIAN/control
-	# Recalculate installed size (kB)
-	$(eval ARM64_SIZE_KB := $(shell du -sk $(ARM64_WORK_DIR) | cut -f1))
+	# Recalculate installed size (kB) — evaluated at run time, after unpacking
 	sed -i '/^$$/d' $(ARM64_WORK_DIR)/DEBIAN/control
-	echo "Installed-Size: $(ARM64_SIZE_KB)" >> $(ARM64_WORK_DIR)/DEBIAN/control
+	echo "Installed-Size: $$(du -sk $(ARM64_WORK_DIR) | cut -f1)" >> $(ARM64_WORK_DIR)/DEBIAN/control
 	# Repack
 	mkdir -p $(DEB_DIR)
 	dpkg-deb --build --root-owner-group $(ARM64_WORK_DIR) $(ARM64_DEB_OUT)

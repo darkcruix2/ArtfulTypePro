@@ -3372,3 +3372,88 @@ mark.find-match.current-match {
     height: calc(100dvh - var(--mobile-header-h, 52px) - var(--mobile-toolbar-h, 52px));
   }
 }
+
+/* ─── Mermaid Diagrams ─────────────────────────────────────────────────────── */
+#writer-view .mermaid-block {
+  position: relative;
+  margin: 1.25rem 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 8px;
+  background: var(--bg-sidebar);
+  overflow: hidden;
+  user-select: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+#writer-view .mermaid-block:hover,
+#writer-view .mermaid-block.editing {
+  border-color: var(--cyan);
+  box-shadow: 0 4px 18px rgba(139, 233, 253, 0.08);
+}
+#writer-view .mermaid-block.has-error { border-left-color: var(--red); }
+
+#writer-view .mermaid-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+#writer-view .mermaid-block:hover .mermaid-toolbar,
+#writer-view .mermaid-block.editing .mermaid-toolbar { opacity: 1; }
+#writer-view .mermaid-label { color: var(--cyan); letter-spacing: 0.03em; }
+
+#writer-view .mermaid-edit-btn {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#writer-view .mermaid-edit-btn:hover { background: var(--cyan); color: var(--bg); }
+
+#writer-view .mermaid-source-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  margin: 0;
+  padding: 0.8rem 1rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: var(--bg-editor);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  tab-size: 4;
+  font-variant-ligatures: none;
+  user-select: text;
+}
+
+#writer-view .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  overflow-x: auto;
+  cursor: default;
+}
+#writer-view .mermaid-diagram svg { max-width: 100%; height: auto; }
+
+#writer-view .mermaid-error-msg:empty { display: none; }
+#writer-view .mermaid-error-msg {
+  padding: 0.5rem 1rem 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--red);
+  white-space: pre-wrap;
+}

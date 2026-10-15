@@ -823,6 +823,10 @@ function nodeToMd(node, insideBlock = false) {
     case "input": return "";
     case "div": case "section": case "article": {
       if (node.classList.contains("footnotes")) return "";
+      if (node.classList.contains("mermaid-block")) {
+        const src = (node.dataset.mermaidSource || "").replace(/^\n+|\s+$/g, "");
+        return `\n\n\`\`\`mermaid\n${src}\n\`\`\`\n\n`;
+      }
       const inner = children();
       return inner.endsWith("\n") ? inner : inner + "\n";
     }
@@ -1098,7 +1102,7 @@ function applySyntaxHighlighting(container = writerViewEl) {
     const blocks = container.querySelectorAll("pre code");
     blocks.forEach(codeEl => {
       const lang = codeEl.className.replace(/language-/, "").trim();
-      if (!lang) return;
+      if (!lang || lang === "mermaid") return;
       const rawCode = codeEl.textContent;
       const highlighted = highlightCode(rawCode, lang);
       codeEl.innerHTML = highlighted;
@@ -1108,6 +1112,185 @@ function applySyntaxHighlighting(container = writerViewEl) {
   }
 }
 
+// ─── Mermaid Diagrams (```mermaid fences, GitHub-compatible) ─────────────────
+const MERMAID_FLOWCHART_TEMPLATE = `flowchart TD
+    A[Start] --> B{Is it working?}
+    B -->|Yes| C[Great!]
+    B -->|No| D[Debug]
+    D --> B`;
+
+let mermaidSeq = 0;
+let mermaidThemeApplied = null;
+
+function isLightBackground() {
+  const bg = getComputedStyle(document.body).backgroundColor || "";
+  const m = bg.match(/\d+(\.\d+)?/g);
+  if (!m || m.length < 3) return false;
+  const [r, g, b] = m.map(Number);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150;
+}
+
+function ensureMermaid() {
+  const m = window.mermaid;
+  if (!m) return null;
+  const theme = isLightBackground() ? "default" : "dark";
+  if (mermaidThemeApplied !== theme) {
+    m.initialize({
+      startOnLoad: false,
+      securityLevel: "strict", // sanitizes labels, disables click callbacks / scripts
+      theme,
+      fontFamily: "Inter, system-ui, sans-serif",
+      flowchart: { curve: "basis", htmlLabels: true },
+    });
+    mermaidThemeApplied = theme;
+  }
+  return m;
+}
+
+async function renderMermaidBlock(block) {
+  const target = block.querySelector(".mermaid-diagram");
+  const errEl = block.querySelector(".mermaid-error-msg");
+  const src = (block.dataset.mermaidSource || "").trim();
+  if (!target) return;
+  const m = ensureMermaid();
+  if (!m) {
+    errEl.textContent = "Mermaid library failed to load.";
+    block.classList.add("has-error");
+    return;
+  }
+  if (!src) {
+    target.replaceChildren();
+    errEl.textContent = "Empty diagram";
+    block.classList.add("has-error");
+    return;
+  }
+  const id = `mmd-${Date.now().toString(36)}-${++mermaidSeq}`;
+  try {
+    const { svg, bindFunctions } = await m.render(id, src);
+    target.innerHTML = svg; // sanitized by Mermaid (securityLevel: strict)
+    bindFunctions?.(target);
+    errEl.textContent = "";
+    block.classList.remove("has-error");
+  } catch (err) {
+    errEl.textContent = `Mermaid syntax error: ${err?.message || err}`;
+    block.classList.add("has-error");
+  } finally {
+    // Mermaid may leave temporary render containers in <body> on failure
+    document.getElementById(id)?.remove();
+    document.getElementById(`d${id}`)?.remove();
+  }
+}
+
+function createMermaidBlock(source) {
+  const block = document.createElement("div");
+  block.className = "mermaid-block";
+  block.contentEditable = "false";
+  block.dataset.mermaidSource = source;
+
+  const bar = document.createElement("div");
+  bar.className = "mermaid-toolbar";
+  const label = document.createElement("span");
+  label.className = "mermaid-label";
+  label.textContent = "◇ mermaid";
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "mermaid-edit-btn";
+  editBtn.textContent = "Edit";
+  editBtn.title = "Edit diagram source (or double-click the diagram)";
+  editBtn.addEventListener("click", (e) => { e.preventDefault(); toggleMermaidEditor(block); });
+  bar.append(label, editBtn);
+
+  const diagram = document.createElement("div");
+  diagram.className = "mermaid-diagram";
+  diagram.addEventListener("dblclick", () => toggleMermaidEditor(block, true));
+
+  const errEl = document.createElement("div");
+  errEl.className = "mermaid-error-msg";
+
+  block.append(bar, diagram, errEl);
+  return block;
+}
+
+function toggleMermaidEditor(block, forceOpen = false) {
+  let editor = block.querySelector(".mermaid-source-editor");
+  const btn = block.querySelector(".mermaid-edit-btn");
+  if (editor && !forceOpen) {
+    editor.remove();
+    block.classList.remove("editing");
+    if (btn) btn.textContent = "Edit";
+    return;
+  }
+  if (editor) { editor.focus(); return; }
+
+  editor = document.createElement("textarea");
+  editor.className = "mermaid-source-editor";
+  editor.spellcheck = false;
+  editor.value = block.dataset.mermaidSource || "";
+  editor.rows = Math.max(4, editor.value.split("\n").length + 1);
+  const rerender = debounce(() => renderMermaidBlock(block), 350);
+  editor.addEventListener("input", () => {
+    block.dataset.mermaidSource = editor.value;
+    editor.rows = Math.max(4, editor.value.split("\n").length + 1);
+    setDirty(true);
+    debouncedStats();
+    rerender();
+  });
+  // Keep writer-level shortcuts (lists, space handling…) out of the textarea,
+  // but still allow Ctrl/Cmd shortcuts like save.
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); toggleMermaidEditor(block); return; }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const s = editor.selectionStart;
+      editor.setRangeText("    ", s, editor.selectionEnd, "end");
+      editor.dispatchEvent(new Event("input"));
+    }
+    if (!isPrimaryMod(e)) e.stopPropagation();
+  });
+  block.querySelector(".mermaid-toolbar").after(editor);
+  block.classList.add("editing");
+  if (btn) btn.textContent = "Done";
+  editor.focus();
+}
+
+async function enhanceWriterMermaid(container = writerViewEl) {
+  const codes = container.querySelectorAll("pre > code.language-mermaid");
+  const jobs = [];
+  codes.forEach(codeEl => {
+    const pre = codeEl.parentElement;
+    const block = createMermaidBlock(codeEl.textContent.replace(/\n$/, ""));
+    pre.replaceWith(block);
+    jobs.push(renderMermaidBlock(block));
+  });
+  await Promise.all(jobs);
+}
+
+function insertMermaidFlowchart() {
+  if (isMarkdownMode) {
+    insertAtCursor(`\n\`\`\`mermaid\n${MERMAID_FLOWCHART_TEMPLATE}\n\`\`\`\n`);
+    return;
+  }
+  restoreSelection();
+  const block = createMermaidBlock(MERMAID_FLOWCHART_TEMPLATE);
+  const sel = window.getSelection();
+  const anchor = sel && sel.rangeCount > 0 && writerViewEl.contains(sel.anchorNode)
+    ? getBlockAncestor(sel.anchorNode) : null;
+  if (anchor && anchor.parentNode) {
+    anchor.after(block);
+  } else {
+    writerViewEl.appendChild(block);
+  }
+  if (!block.nextElementSibling) {
+    const p = document.createElement("p");
+    p.appendChild(document.createElement("br"));
+    block.after(p);
+  }
+  renderMermaidBlock(block);
+  toggleMermaidEditor(block, true);
+  setDirty(true);
+  debouncedStats();
+}
+
 async function renderMarkdownToWriter(markdownText) {
   try {
     docFootnotes = parseFootnotesFromMarkdown(markdownText);
@@ -1115,6 +1298,7 @@ async function renderMarkdownToWriter(markdownText) {
     writerViewEl.innerHTML = html;
     await fixImageSrcs(writerViewEl);
     applySyntaxHighlighting(writerViewEl);
+    await enhanceWriterMermaid(writerViewEl);
     enhanceWriterTaskLists(writerViewEl);
     enhanceWriterFootnotes();
     enhanceWriterExtendedSyntax(writerViewEl);
@@ -1227,7 +1411,7 @@ function enhanceWriterExtendedSyntax(container = writerViewEl) {
       let p = node.parentElement;
       while (p && p !== container) {
         const t = p.tagName.toLowerCase();
-        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes")) {
+        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || p.classList?.contains("mermaid-block") || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes")) {
           return NodeFilter.FILTER_REJECT;
         }
         p = p.parentElement;
@@ -3984,6 +4168,7 @@ function handleKeydown(e) {
     if (e.key === "h" || e.key === "H") { e.preventDefault(); applyHighlight(); return; }
     if (e.key === "t" || e.key === "T") { e.preventDefault(); insertAtCursor(formatTime(new Date())); return; }
     if (e.key === "d" || e.key === "D") { e.preventDefault(); insertAtCursor(formatDate(new Date())); return; }
+    if (e.key === "m" || e.key === "M") { e.preventDefault(); insertMermaidFlowchart(); return; }
   }
   if (mod && e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();
@@ -4171,6 +4356,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sub-btn")?.addEventListener("click",       () => applySubscript());
   document.getElementById("sup-btn")?.addEventListener("click",       () => applySuperscript());
   document.getElementById("link-btn")?.addEventListener("click",      () => applyLink());
+  document.getElementById("mermaid-btn")?.addEventListener("click",   () => insertMermaidFlowchart());
   document.getElementById("image-btn")?.addEventListener("click",     () => applyImageUpload());
   document.getElementById("code-btn")?.addEventListener("click",   () => applyCode());
   document.getElementById("undo-btn")?.addEventListener("click",   doUndo);
