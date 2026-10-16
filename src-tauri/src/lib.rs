@@ -1,4 +1,5 @@
 pub mod nextcloud;
+pub mod diagrams;
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 
 use pulldown_cmark::{html, Options, Parser};
@@ -387,6 +388,10 @@ pub fn run() {
             write_nextcloud_binary_file,
             delete_nextcloud_entry,
             create_nextcloud_folder,
+            diagrams::render_plantuml,
+            diagrams::render_d2,
+            diagrams::render_svgbob,
+            diagrams::diagram_capabilities,
         ]);
 
     // ── Desktop-only plugins & commands ──────────────────────────────────────

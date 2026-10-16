@@ -823,9 +823,9 @@ function nodeToMd(node, insideBlock = false) {
     case "input": return "";
     case "div": case "section": case "article": {
       if (node.classList.contains("footnotes")) return "";
-      if (node.classList.contains("mermaid-block")) {
-        const src = (node.dataset.mermaidSource || "").replace(/^\n+|\s+$/g, "");
-        const fenceLang = node.dataset.mermaidFence ?? "mermaid";
+      if (node.classList.contains("diagram-block")) {
+        const src = (node.dataset.diagramSource || "").replace(/^\n+|\s+$/g, "");
+        const fenceLang = node.dataset.diagramFence ?? node.dataset.diagramEngine ?? "";
         return `\n\n\`\`\`${fenceLang}\n${src}\n\`\`\`\n\n`;
       }
       const inner = children();
@@ -1103,7 +1103,7 @@ function applySyntaxHighlighting(container = writerViewEl) {
     const blocks = container.querySelectorAll("pre code");
     blocks.forEach(codeEl => {
       const lang = codeEl.className.replace(/language-/, "").trim();
-      if (!lang || lang === "mermaid") return;
+      if (!lang || isDiagramLang(lang)) return;
       const rawCode = codeEl.textContent;
       const highlighted = highlightCode(rawCode, lang);
       codeEl.innerHTML = highlighted;
@@ -1113,14 +1113,50 @@ function applySyntaxHighlighting(container = writerViewEl) {
   }
 }
 
-// ─── Mermaid Diagrams (```mermaid fences, GitHub-compatible) ─────────────────
-const MERMAID_FLOWCHART_TEMPLATE = `flowchart TD
+// ─── Diagrams (Mermaid, PlantUML, D2, Markmap, ASCII/Unicode via Svgbob) ─────
+// Each fenced code block whose language matches an engine is replaced in the
+// Writer view by a non-editable "diagram block". The original source (and the
+// original fence tag) is kept in data attributes so saving round-trips exactly.
+
+const DIAGRAM_TEMPLATES = {
+  mermaid: `flowchart TD
     A[Start] --> B{Is it working?}
     B -->|Yes| C[Great!]
     B -->|No| D[Debug]
-    D --> B`;
+    D --> B`,
+  plantuml: `@startuml
+actor User
+participant "ArtfulType" as App
+User -> App : write Markdown
+App --> User : rendered diagram
+@enduml`,
+  d2: `direction: right
+writer: Writer {shape: person}
+app: ArtfulType Pro
+file: Markdown file {shape: page}
+writer -> app: types
+app -> file: saves`,
+  markmap: `# ArtfulType Pro
+## Writing
+- Markdown
+- Footnotes
+## Diagrams
+- Mermaid
+- PlantUML
+- D2
+- Markmap
+- Svgbob`,
+  svgbob: `┌──────────┐       +-----------+
+│  Writer  │──────>|  Markdown |
+└──────────┘       +-----+-----+
+                         |
+                         v
+                   .-----------.
+                  (   Diagram   )
+                   '-----------'`,
+};
 
-let mermaidSeq = 0;
+let diagramSeq = 0;
 let mermaidThemeApplied = null;
 
 function isLightBackground() {
@@ -1131,6 +1167,93 @@ function isLightBackground() {
   return (0.299 * r + 0.587 * g + 0.114 * b) > 150;
 }
 
+// ── SVG sanitiser for renderer output (PlantUML / D2 / Svgbob) ──────────────
+// External renderer output is treated as untrusted: scripts, event handlers,
+// external references and embedded documents are stripped. Parsing uses
+// DOMParser (no innerHTML), so nothing executes during sanitisation.
+const SVG_BLOCKED_TAGS = new Set(["script", "iframe", "object", "embed", "frame", "frameset",
+  "link", "meta", "base", "form", "input", "button", "textarea", "select", "audio", "video",
+  "set", "animate", "animatemotion", "animatetransform", "handler", "listener"]);
+const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,[a-z0-9+/=\s]+$/i;
+
+function sanitizeCssText(css) {
+  return String(css)
+    .replace(/@import[^;]*;?/gi, "")
+    .replace(/expression\s*\(/gi, "")
+    .replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (m, _q, url) => {
+      const u = url.trim();
+      return (u.startsWith("#") || /^data:(font|image|application\/(font|x-font))/i.test(u)) ? m : "none";
+    });
+}
+
+function sanitizeSvgElement(root) {
+  const all = [root, ...root.querySelectorAll("*")];
+  for (const el of all) {
+    const tag = (el.localName || "").toLowerCase();
+    if (SVG_BLOCKED_TAGS.has(tag)) { el.remove(); continue; }
+    if (tag === "style") { el.textContent = sanitizeCssText(el.textContent); continue; }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim();
+      if (name.startsWith("on")) { el.removeAttribute(attr.name); continue; }
+      if (name === "href" || name === "xlink:href" || name === "src" || name === "action" ||
+          name === "formaction" || name === "srcset") {
+        const ok = value.startsWith("#") || (tag === "image" && SAFE_DATA_IMAGE_RE.test(value)) ||
+                   (tag === "img" && SAFE_DATA_IMAGE_RE.test(value));
+        if (!ok) el.removeAttribute(attr.name);
+        continue;
+      }
+      if (name === "style") el.setAttribute("style", sanitizeCssText(value));
+      else if (/^\s*(javascript|vbscript|data):/i.test(value) && name !== "d") el.removeAttribute(attr.name);
+    }
+  }
+  return root;
+}
+
+/** Parse an SVG string from a renderer, sanitise it and mount it in `target`. */
+function mountSanitizedSvg(target, svgText) {
+  const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+  const svg = doc.documentElement;
+  if (!svg || svg.localName !== "svg" || doc.getElementsByTagName("parsererror").length) {
+    throw new Error("Renderer returned invalid SVG");
+  }
+  sanitizeSvgElement(svg);
+  const node = document.importNode(svg, true);
+  if (!node.getAttribute("viewBox")) {
+    const w0 = parseFloat(node.getAttribute("width"));
+    const h0 = parseFloat(node.getAttribute("height"));
+    if (w0 > 0 && h0 > 0) node.setAttribute("viewBox", `0 0 ${w0} ${h0}`);
+  }
+  // Make diagrams responsive: rely on viewBox when present.
+  if (node.getAttribute("viewBox")) {
+    const vb = node.getAttribute("viewBox").trim().split(/[\s,]+/).map(Number);
+    const w = parseFloat(node.getAttribute("width")) || parseFloat(node.style.width) || vb[2];
+    node.style.removeProperty("width");
+    node.style.removeProperty("height");
+    if (node.getAttribute("preserveAspectRatio") === "none") node.removeAttribute("preserveAspectRatio");
+    if (w) node.style.maxWidth = `min(100%, ${w}px)`;
+    node.removeAttribute("height");
+    node.setAttribute("width", "100%");
+  }
+  target.replaceChildren(node);
+}
+
+// Caches rendered SVG per engine/theme/source so editing or re-opening a
+// document does not respawn external renderers for unchanged diagrams.
+const diagramRenderCache = new Map();
+const DIAGRAM_CACHE_MAX = 64;
+async function cachedInvoke(cmd, args) {
+  const key = `${cmd}\u0000${JSON.stringify(args)}`;
+  if (diagramRenderCache.has(key)) return diagramRenderCache.get(key);
+  const p = invoke(cmd, args);
+  diagramRenderCache.set(key, p);
+  if (diagramRenderCache.size > DIAGRAM_CACHE_MAX) {
+    diagramRenderCache.delete(diagramRenderCache.keys().next().value);
+  }
+  try { return await p; } catch (e) { diagramRenderCache.delete(key); throw e; }
+}
+
+// ── Mermaid ─────────────────────────────────────────────────────────────────
 function ensureMermaid() {
   const m = window.mermaid;
   if (!m) return null;
@@ -1148,76 +1271,252 @@ function ensureMermaid() {
   return m;
 }
 
-async function renderMermaidBlock(block) {
-  const target = block.querySelector(".mermaid-diagram");
-  const errEl = block.querySelector(".mermaid-error-msg");
-  const src = (block.dataset.mermaidSource || "").trim();
-  if (!target) return;
+async function renderMermaidInto(target, src) {
   const m = ensureMermaid();
-  if (!m) {
-    errEl.textContent = "Mermaid library failed to load.";
-    block.classList.add("has-error");
-    return;
-  }
-  if (!src) {
-    target.replaceChildren();
-    errEl.textContent = "Empty diagram";
-    block.classList.add("has-error");
-    return;
-  }
-  const id = `mmd-${Date.now().toString(36)}-${++mermaidSeq}`;
+  if (!m) throw new Error("Mermaid library failed to load.");
+  const id = `mmd-${Date.now().toString(36)}-${++diagramSeq}`;
   try {
     const { svg, bindFunctions } = await m.render(id, src);
     target.innerHTML = svg; // sanitized by Mermaid (securityLevel: strict)
     bindFunctions?.(target);
-    errEl.textContent = "";
-    block.classList.remove("has-error");
-  } catch (err) {
-    errEl.textContent = `Mermaid syntax error: ${err?.message || err}`;
-    block.classList.add("has-error");
   } finally {
     // Mermaid may leave temporary render containers in <body> on failure.
-    // NOTE: the rendered <svg> itself carries `id`, so never remove it from our block.
+    // NOTE: the rendered <svg> itself carries `id`, so never remove it from our target.
     [id, `d${id}`].forEach(x => {
       const el = document.getElementById(x);
-      if (el && !block.contains(el)) el.remove();
+      if (el && !target.contains(el)) el.remove();
     });
   }
 }
 
-function createMermaidBlock(source) {
+// ── Markmap (lazy-loaded, local vendor files only) ──────────────────────────
+let markmapLoader = null;
+function loadLocalScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+function ensureMarkmap() {
+  if (!markmapLoader) {
+    markmapLoader = (async () => {
+      if (!window.d3) await loadLocalScript("/vendor/d3.min.js");
+      if (!window.markmap?.Markmap) await loadLocalScript("/vendor/markmap-view.js");
+      if (!window.markmap?.Transformer) await loadLocalScript("/vendor/markmap-lib.js");
+      const mm = window.markmap;
+      if (!mm?.Markmap || !mm?.Transformer) throw new Error("Markmap library failed to load.");
+      // Only offline plugins: katex/hljs/npm-url plugins would fetch code from CDNs.
+      const offline = (mm.builtInPlugins || []).filter(p =>
+        ["frontmatter", "checkbox", "sourceLines"].includes(p?.name));
+      return { mm, transformer: new mm.Transformer(offline) };
+    })().catch(err => { markmapLoader = null; throw err; });
+  }
+  return markmapLoader;
+}
+
+// Node labels are rendered by markmap-view as HTML; allow-list them.
+const MARKMAP_ALLOWED_TAGS = new Set(["b", "strong", "i", "em", "code", "del", "s", "mark", "span",
+  "br", "sub", "sup", "u", "kbd", "a"]);
+function sanitizeInlineHtml(html) {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const walk = (node) => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.localName;
+        if (!MARKMAP_ALLOWED_TAGS.has(tag)) {
+          if (["script", "style", "iframe", "object", "embed", "img", "svg", "math", "template"].includes(tag)) {
+            child.remove();
+          } else {
+            walk(child);
+            child.replaceWith(...child.childNodes);
+          }
+          continue;
+        }
+        // Strip every attribute (links would navigate the app's webview).
+        for (const a of Array.from(child.attributes)) child.removeAttribute(a.name);
+        walk(child);
+      } else if (child.nodeType !== Node.TEXT_NODE) {
+        child.remove();
+      }
+    }
+  };
+  walk(doc.body);
+  return doc.body.innerHTML;
+}
+function sanitizeMarkmapTree(node, depth = 0) {
+  if (!node || depth > 200) return 0;
+  node.content = sanitizeInlineHtml(node.content || "");
+  const kids = node.children || [];
+  if (!kids.length) return 1;
+  return kids.reduce((n, c) => n + sanitizeMarkmapTree(c, depth + 1), 0);
+}
+
+async function renderMarkmapInto(target, src, block) {
+  const { mm, transformer } = await ensureMarkmap();
+  const { root, frontmatter } = transformer.transform(src);
+  const leaves = sanitizeMarkmapTree(root);
+  block._markmap?.destroy?.();
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("markmap-svg");
+  svg.style.height = `${Math.min(720, Math.max(240, leaves * 30 + 40))}px`;
+  target.replaceChildren(svg);
+  const opts = mm.deriveOptions ? mm.deriveOptions(frontmatter?.markmap || {}) : {};
+  const view = mm.Markmap.create(svg, { duration: 300, ...opts }, root);
+  block._markmap = view;
+  // Fit once layout is known (block may have just been inserted).
+  requestAnimationFrame(() => view.fit?.());
+}
+
+// ── Engine registry ─────────────────────────────────────────────────────────
+const PLANTUML_START_RE = /^@start(uml|mindmap|gantt|wbs|salt|json|yaml|ebnf|regex|chen|chronology|board|files|creole|math|latex|ditaa|dot|nwdiag|sdl)\b/i;
+
+const DIAGRAM_ENGINES = {
+  mermaid: {
+    label: "◇ mermaid",
+    menuLabel: "Mermaid",
+    fences: ["mermaid"],
+    detect: (src) => looksLikeMermaid(src),
+    render: (target, src) => renderMermaidInto(target, src),
+  },
+  plantuml: {
+    label: "◇ plantuml",
+    menuLabel: "PlantUML",
+    fences: ["plantuml", "puml", "uml"],
+    detect: (src) => PLANTUML_START_RE.test(firstSignificantLine(src)),
+    render: async (target, src) => mountSanitizedSvg(target,
+      await cachedInvoke("render_plantuml", { source: src, dark: !isLightBackground() })),
+  },
+  d2: {
+    label: "◇ d2",
+    menuLabel: "D2",
+    fences: ["d2"],
+    detect: () => false,
+    render: async (target, src) => mountSanitizedSvg(target,
+      await cachedInvoke("render_d2", { source: src, dark: !isLightBackground() })),
+  },
+  markmap: {
+    label: "◇ markmap",
+    menuLabel: "Markmap (mind map)",
+    fences: ["markmap", "mindmap-md"],
+    detect: () => false,
+    render: (target, src, block) => renderMarkmapInto(target, src, block),
+  },
+  svgbob: {
+    label: "◇ text diagram",
+    menuLabel: "ASCII / Unicode diagram",
+    fences: ["svgbob", "bob", "ascii", "asciiart", "ascii-art", "textdiagram"],
+    detect: () => false,
+    render: async (target, src) => mountSanitizedSvg(target,
+      await cachedInvoke("render_svgbob", { source: src })),
+  },
+};
+
+const DIAGRAM_FENCE_TO_ENGINE = new Map(
+  Object.entries(DIAGRAM_ENGINES).flatMap(([k, e]) => e.fences.map(f => [f, k])));
+const DIAGRAM_FENCE_ALT = [...DIAGRAM_FENCE_TO_ENGINE.keys()]
+  .sort((a, b) => b.length - a.length).map(f => f.replace(/[-]/g, "\\-")).join("|");
+
+function firstSignificantLine(src) {
+  return (src || "").split("\n").map(l => l.trim())
+    .find(l => l && !l.startsWith("'") && !(l.startsWith("%%") && !l.startsWith("%%{"))) || "";
+}
+
+/** Resolve a code-fence language + source to a diagram engine key (or null). */
+function resolveDiagramEngine(lang, src) {
+  const l = (lang || "").trim().toLowerCase();
+  if (l) return DIAGRAM_FENCE_TO_ENGINE.get(l) || null;
+  for (const [key, eng] of Object.entries(DIAGRAM_ENGINES)) {
+    if (eng.detect(src)) return key;
+  }
+  return null;
+}
+
+function isDiagramLang(lang) {
+  return DIAGRAM_FENCE_TO_ENGINE.has((lang || "").trim().toLowerCase());
+}
+
+// Newest render wins: a slow PlantUML/D2 call must not overwrite a newer one.
+async function renderDiagramBlock(block) {
+  const target = block.querySelector(".diagram-view");
+  const errEl = block.querySelector(".diagram-error-msg");
+  if (!target) return;
+  const engine = DIAGRAM_ENGINES[block.dataset.diagramEngine];
+  const src = (block.dataset.diagramSource || "").replace(/\s+$/, "");
+  const ticket = String(++diagramSeq);
+  block.dataset.renderTicket = ticket;
+  const fail = (msg) => {
+    if (block.dataset.renderTicket !== ticket) return;
+    errEl.textContent = msg;
+    block.classList.add("has-error");
+  };
+  if (!engine) return fail("Unknown diagram type");
+  if (!src.trim()) { target.replaceChildren(); return fail("Empty diagram"); }
+
+  block.classList.add("rendering");
+  // Render off-DOM-target first so stale results never flash in.
+  const scratch = document.createElement("div");
+  scratch.className = "diagram-scratch";
+  try {
+    if (block.dataset.diagramEngine === "markmap") {
+      // Markmap needs a live, measurable SVG — render in place.
+      await engine.render(target, src, block);
+    } else {
+      await engine.render(scratch, src, block);
+      if (block.dataset.renderTicket !== ticket) return;
+      target.replaceChildren(...scratch.childNodes);
+    }
+    if (block.dataset.renderTicket !== ticket) return;
+    errEl.textContent = "";
+    block.classList.remove("has-error");
+  } catch (err) {
+    const name = engine.menuLabel.split(" ")[0];
+    const msg = String(err?.message || err || "Unknown error").slice(0, 2000);
+    fail(`${name}: ${msg}`);
+  } finally {
+    if (block.dataset.renderTicket === ticket) block.classList.remove("rendering");
+  }
+}
+
+function createDiagramBlock(engineKey, source, fence = engineKey) {
+  const engine = DIAGRAM_ENGINES[engineKey];
   const block = document.createElement("div");
-  block.className = "mermaid-block";
+  block.className = `diagram-block diagram-${engineKey}`;
   block.contentEditable = "false";
-  block.dataset.mermaidSource = source;
+  block.dataset.diagramEngine = engineKey;
+  block.dataset.diagramSource = source;
+  block.dataset.diagramFence = fence; // "" = originally an untagged ``` fence
 
   const bar = document.createElement("div");
-  bar.className = "mermaid-toolbar";
+  bar.className = "diagram-toolbar";
   const label = document.createElement("span");
-  label.className = "mermaid-label";
-  label.textContent = "◇ mermaid";
+  label.className = "diagram-label";
+  label.textContent = engine?.label || `◇ ${engineKey}`;
   const editBtn = document.createElement("button");
   editBtn.type = "button";
-  editBtn.className = "mermaid-edit-btn";
+  editBtn.className = "diagram-edit-btn";
   editBtn.textContent = "Edit";
   editBtn.title = "Edit diagram source (or double-click the diagram)";
-  editBtn.addEventListener("click", (e) => { e.preventDefault(); toggleMermaidEditor(block); });
+  editBtn.addEventListener("click", (e) => { e.preventDefault(); toggleDiagramEditor(block); });
   bar.append(label, editBtn);
 
-  const diagram = document.createElement("div");
-  diagram.className = "mermaid-diagram";
-  diagram.addEventListener("dblclick", () => toggleMermaidEditor(block, true));
+  const view = document.createElement("div");
+  view.className = "diagram-view";
+  view.addEventListener("dblclick", () => toggleDiagramEditor(block, true));
 
   const errEl = document.createElement("div");
-  errEl.className = "mermaid-error-msg";
+  errEl.className = "diagram-error-msg";
 
-  block.append(bar, diagram, errEl);
+  block.append(bar, view, errEl);
   return block;
 }
 
-function toggleMermaidEditor(block, forceOpen = false) {
-  let editor = block.querySelector(".mermaid-source-editor");
-  const btn = block.querySelector(".mermaid-edit-btn");
+function toggleDiagramEditor(block, forceOpen = false) {
+  let editor = block.querySelector(".diagram-source-editor");
+  const btn = block.querySelector(".diagram-edit-btn");
   if (editor && !forceOpen) {
     editor.remove();
     block.classList.remove("editing");
@@ -1227,13 +1526,15 @@ function toggleMermaidEditor(block, forceOpen = false) {
   if (editor) { editor.focus(); return; }
 
   editor = document.createElement("textarea");
-  editor.className = "mermaid-source-editor";
+  editor.className = "diagram-source-editor";
   editor.spellcheck = false;
-  editor.value = block.dataset.mermaidSource || "";
+  editor.value = block.dataset.diagramSource || "";
   editor.rows = Math.max(4, editor.value.split("\n").length + 1);
-  const rerender = debounce(() => renderMermaidBlock(block), 350);
+  // External renderers (PlantUML/D2 spawn a process) get a longer debounce.
+  const slow = ["plantuml", "d2"].includes(block.dataset.diagramEngine);
+  const rerender = debounce(() => renderDiagramBlock(block), slow ? 800 : 350);
   editor.addEventListener("input", () => {
-    block.dataset.mermaidSource = editor.value;
+    block.dataset.diagramSource = editor.value;
     editor.rows = Math.max(4, editor.value.split("\n").length + 1);
     setDirty(true);
     debouncedStats();
@@ -1242,16 +1543,17 @@ function toggleMermaidEditor(block, forceOpen = false) {
   // Keep writer-level shortcuts (lists, space handling…) out of the textarea,
   // but still allow Ctrl/Cmd shortcuts like save.
   editor.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); toggleMermaidEditor(block); return; }
+    if (e.key === "Escape") { e.preventDefault(); toggleDiagramEditor(block); return; }
     if (e.key === "Tab") {
       e.preventDefault();
       const s = editor.selectionStart;
-      editor.setRangeText("    ", s, editor.selectionEnd, "end");
+      editor.setRangeText(block.dataset.diagramEngine === "d2" ? "  " : "    ", s, editor.selectionEnd, "end");
       editor.dispatchEvent(new Event("input"));
     }
     if (!isPrimaryMod(e)) e.stopPropagation();
   });
-  block.querySelector(".mermaid-toolbar").after(editor);
+  editor.addEventListener("paste", (e) => e.stopPropagation());
+  block.querySelector(".diagram-toolbar").after(editor);
   block.classList.add("editing");
   if (btn) btn.textContent = "Done";
   editor.focus();
@@ -1268,17 +1570,16 @@ function looksLikeMermaid(src) {
   return !!first && MERMAID_START_RE.test(first);
 }
 
-async function enhanceWriterMermaid(container = writerViewEl) {
+async function enhanceWriterDiagrams(container = writerViewEl) {
   const jobs = [];
   container.querySelectorAll("pre > code").forEach(codeEl => {
     const lang = codeEl.className.replace(/language-/, "").trim().toLowerCase();
     const text = codeEl.textContent.replace(/\n$/, "");
-    const isTagged = lang === "mermaid";
-    if (!isTagged && (lang || !looksLikeMermaid(text))) return;
-    const block = createMermaidBlock(text);
-    if (!isTagged) block.dataset.mermaidFence = ""; // keep the original bare ``` on save
+    const engine = resolveDiagramEngine(lang, text);
+    if (!engine) return;
+    const block = createDiagramBlock(engine, text, lang);
     codeEl.parentElement.replaceWith(block);
-    jobs.push(renderMermaidBlock(block));
+    jobs.push(renderDiagramBlock(block));
   });
   await Promise.all(jobs);
 }
@@ -1289,16 +1590,15 @@ function getPreSourceText(pre) {
   return md.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "");
 }
 
-/** Replace a writer <pre><code class="language-mermaid"> with a rendered diagram. */
-function convertPreToMermaid(pre) {
+/** Replace a writer <pre><code class="language-…"> with a rendered diagram. */
+function convertPreToDiagram(pre) {
   if (!pre || !pre.parentNode) return false;
   const code = pre.querySelector("code");
   const lang = (code?.className || "").replace(/language-/, "").trim().toLowerCase();
   const src = getPreSourceText(pre);
-  const isTagged = lang === "mermaid";
-  if (!isTagged && (lang || !looksLikeMermaid(src))) return false;
-  const block = createMermaidBlock(src);
-  if (!isTagged) block.dataset.mermaidFence = "";
+  const engine = resolveDiagramEngine(lang, src);
+  if (!engine) return false;
+  const block = createDiagramBlock(engine, src, lang);
   pre.replaceWith(block);
   let next = block.nextElementSibling;
   if (!next) {
@@ -1306,7 +1606,7 @@ function convertPreToMermaid(pre) {
     next.appendChild(document.createElement("br"));
     block.after(next);
   }
-  renderMermaidBlock(block);
+  renderDiagramBlock(block);
   placeCaret(next, 0);
   writerViewEl.focus();
   setDirty(true);
@@ -1314,27 +1614,33 @@ function convertPreToMermaid(pre) {
   return true;
 }
 
-/** Writer paste: Markdown text containing a ```mermaid fence is rendered instead of pasted raw. */
-async function handleWriterMermaidPaste(e) {
+/** Writer paste: Markdown text containing a diagram fence is rendered instead of pasted raw. */
+async function handleWriterDiagramPaste(e) {
   if (isMarkdownMode) return;
-  if (e.target.closest?.(".mermaid-source-editor")) return;
+  if (e.target.closest?.(".diagram-source-editor")) return;
   const text = e.clipboardData?.getData("text/plain") || "";
-  const hasFence = /^\s*```\s*(mermaid\b|\n\s*(%%\{|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|journey))/im.test(text);
-  const isRawDiagram = !hasFence && !/^\s*```/m.test(text) && text.includes("\n") && looksLikeMermaid(text);
-  if (!hasFence && !isRawDiagram) return;
+  if (!text.includes("\n")) return;
+  const taggedRe = new RegExp(`^\\s*\`\`\`\\s*(${DIAGRAM_FENCE_ALT})\\s*$`, "im");
+  const untaggedRe = /^\s*```\s*\n\s*(%%\{|@start[a-z]+|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|journey)/im;
+  const hasFence = taggedRe.test(text) || untaggedRe.test(text);
+  let rawEngine = null;
+  if (!hasFence && !/^\s*```/m.test(text)) {
+    rawEngine = looksLikeMermaid(text) ? "mermaid"
+      : PLANTUML_START_RE.test(firstSignificantLine(text)) ? "plantuml" : null;
+  }
+  if (!hasFence && !rawEngine) return;
   e.preventDefault();
   e.stopPropagation();
   const sel = window.getSelection();
   const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
   // Normalise indented fences so the Markdown parser recognises them;
   // wrap raw diagram text in a fence.
-  const md = isRawDiagram
-    ? "```mermaid\n" + text.replace(/\s+$/, "") + "\n```\n"
+  const md = rawEngine
+    ? "```" + rawEngine + "\n" + text.replace(/\s+$/, "") + "\n```\n"
     : text.replace(/^[ \t]+(```)/gm, "$1");
   const tmp = document.createElement("div");
   tmp.innerHTML = await invoke("parse_markdown", { text: md });
   applySyntaxHighlighting(tmp);
-  await enhanceWriterMermaid(tmp);
   const nodes = Array.from(tmp.childNodes);
   const anchor = range && writerViewEl.contains(range.startContainer)
     ? getBlockAncestor(range.startContainer) : null;
@@ -1346,23 +1652,43 @@ async function handleWriterMermaidPaste(e) {
   } else {
     nodes.forEach(n => writerViewEl.appendChild(n));
   }
+  // Enhance after insertion so Markmap gets a measurable container.
+  const jobs = [];
+  nodes.forEach(n => {
+    if (n.nodeType !== Node.ELEMENT_NODE) return;
+    const pres = n.matches("pre") ? [n] : Array.from(n.querySelectorAll("pre"));
+    pres.forEach(pre => {
+      const codeEl = pre.querySelector(":scope > code");
+      if (!codeEl) return;
+      const lang = codeEl.className.replace(/language-/, "").trim().toLowerCase();
+      const src = codeEl.textContent.replace(/\n$/, "");
+      const engine = resolveDiagramEngine(lang, src);
+      if (!engine) return;
+      const block = createDiagramBlock(engine, src, lang);
+      pre.replaceWith(block);
+      jobs.push(renderDiagramBlock(block));
+    });
+  });
   const last = writerViewEl.lastElementChild;
-  if (last && last.classList.contains("mermaid-block")) {
+  if (last && last.classList.contains("diagram-block")) {
     const p = document.createElement("p");
     p.appendChild(document.createElement("br"));
     writerViewEl.appendChild(p);
   }
   setDirty(true);
   debouncedStats();
+  await Promise.all(jobs);
 }
 
-function insertMermaidFlowchart() {
+function insertDiagram(engineKey = "mermaid") {
+  const template = DIAGRAM_TEMPLATES[engineKey] || "";
+  const fence = DIAGRAM_ENGINES[engineKey]?.fences[0] || engineKey;
   if (isMarkdownMode) {
-    insertAtCursor(`\n\`\`\`mermaid\n${MERMAID_FLOWCHART_TEMPLATE}\n\`\`\`\n`);
+    insertAtCursor(`\n\`\`\`${fence}\n${template}\n\`\`\`\n`);
     return;
   }
   restoreSelection();
-  const block = createMermaidBlock(MERMAID_FLOWCHART_TEMPLATE);
+  const block = createDiagramBlock(engineKey, template, fence);
   const sel = window.getSelection();
   const anchor = sel && sel.rangeCount > 0 && writerViewEl.contains(sel.anchorNode)
     ? getBlockAncestor(sel.anchorNode) : null;
@@ -1376,10 +1702,55 @@ function insertMermaidFlowchart() {
     p.appendChild(document.createElement("br"));
     block.after(p);
   }
-  renderMermaidBlock(block);
-  toggleMermaidEditor(block, true);
+  renderDiagramBlock(block);
+  toggleDiagramEditor(block, true);
   setDirty(true);
   debouncedStats();
+}
+
+function insertMermaidFlowchart() { insertDiagram("mermaid"); }
+
+// Toolbar popover: choose which diagram type to insert.
+let diagramMenuEl = null;
+function closeDiagramMenu() {
+  diagramMenuEl?.classList.add("hidden");
+  document.getElementById("mermaid-btn")?.setAttribute("aria-expanded", "false");
+}
+function toggleDiagramMenu(anchorBtn) {
+  saveSelection?.();
+  if (!diagramMenuEl) {
+    diagramMenuEl = document.createElement("div");
+    diagramMenuEl.id = "diagram-menu";
+    diagramMenuEl.className = "diagram-menu hidden";
+    diagramMenuEl.setAttribute("role", "menu");
+    Object.entries(DIAGRAM_ENGINES).forEach(([key, eng]) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.id = `diagram-menu-${key}`;
+      item.className = "diagram-menu-item";
+      item.setAttribute("role", "menuitem");
+      const name = document.createElement("span");
+      name.textContent = eng.menuLabel;
+      const tag = document.createElement("code");
+      tag.textContent = eng.fences[0];
+      item.append(name, tag);
+      item.addEventListener("mousedown", (e) => e.preventDefault()); // keep caret
+      item.addEventListener("click", () => { closeDiagramMenu(); insertDiagram(key); });
+      diagramMenuEl.appendChild(item);
+    });
+    document.body.appendChild(diagramMenuEl);
+    document.addEventListener("mousedown", (e) => {
+      if (!diagramMenuEl.contains(e.target) && !e.target.closest?.("#mermaid-btn")) closeDiagramMenu();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDiagramMenu(); });
+  }
+  const opening = diagramMenuEl.classList.contains("hidden");
+  if (!opening) { closeDiagramMenu(); return; }
+  const r = anchorBtn.getBoundingClientRect();
+  diagramMenuEl.style.top = `${Math.round(r.bottom + 6)}px`;
+  diagramMenuEl.style.left = `${Math.round(Math.min(r.left, window.innerWidth - 240))}px`;
+  diagramMenuEl.classList.remove("hidden");
+  anchorBtn.setAttribute("aria-expanded", "true");
 }
 
 async function renderMarkdownToWriter(markdownText) {
@@ -1389,7 +1760,7 @@ async function renderMarkdownToWriter(markdownText) {
     writerViewEl.innerHTML = html;
     await fixImageSrcs(writerViewEl);
     applySyntaxHighlighting(writerViewEl);
-    await enhanceWriterMermaid(writerViewEl);
+    await enhanceWriterDiagrams(writerViewEl);
     enhanceWriterTaskLists(writerViewEl);
     enhanceWriterFootnotes();
     enhanceWriterExtendedSyntax(writerViewEl);
@@ -1502,7 +1873,7 @@ function enhanceWriterExtendedSyntax(container = writerViewEl) {
       let p = node.parentElement;
       while (p && p !== container) {
         const t = p.tagName.toLowerCase();
-        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || p.classList?.contains("mermaid-block") || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes")) {
+        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || p.classList?.contains("diagram-block") || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes")) {
           return NodeFilter.FILTER_REJECT;
         }
         p = p.parentElement;
@@ -3138,7 +3509,7 @@ function getLineTextBeforeCaret(range, block) {
  */
 function closeCodeBlock(pre) {
   hideCodeControls();
-  if (convertPreToMermaid(pre)) return;
+  if (convertPreToDiagram(pre)) return;
   applySyntaxHighlighting(pre);
 
   // <p><br></p> is the browser-standard structure for an empty editable paragraph.
@@ -3180,7 +3551,11 @@ const SUPPORTED_LANGUAGES = [
   { label: "JavaScript", value: "js" },
   { label: "Make", value: "make" },
   { label: "Markdown", value: "markdown" },
-  { label: "Mermaid Diagram", value: "mermaid" },
+  { label: "Diagram: D2", value: "d2" },
+  { label: "Diagram: Markmap", value: "markmap" },
+  { label: "Diagram: Mermaid", value: "mermaid" },
+  { label: "Diagram: PlantUML", value: "plantuml" },
+  { label: "Diagram: Svgbob (ASCII/Unicode)", value: "svgbob" },
   { label: "Python", value: "python" },
   { label: "SQL", value: "sql" },
   { label: "TeX / LaTeX", value: "tex" },
@@ -3226,10 +3601,10 @@ function ensureCodeControls() {
     } else {
       code.className = "";
     }
-    if (selectedLang === "mermaid") {
+    if (isDiagramLang(selectedLang)) {
       const pre = _activePre;
       hideCodeControls();
-      convertPreToMermaid(pre);
+      convertPreToDiagram(pre);
       return;
     }
     // Re-apply syntax highlighting with new language selection
@@ -4455,8 +4830,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sub-btn")?.addEventListener("click",       () => applySubscript());
   document.getElementById("sup-btn")?.addEventListener("click",       () => applySuperscript());
   document.getElementById("link-btn")?.addEventListener("click",      () => applyLink());
-  document.getElementById("mermaid-btn")?.addEventListener("click",   () => insertMermaidFlowchart());
-  writerViewEl?.addEventListener("paste", handleWriterMermaidPaste, true);
+  document.getElementById("mermaid-btn")?.addEventListener("click",   (e) => toggleDiagramMenu(e.currentTarget));
+  writerViewEl?.addEventListener("paste", handleWriterDiagramPaste, true);
   document.getElementById("image-btn")?.addEventListener("click",     () => applyImageUpload());
   document.getElementById("code-btn")?.addEventListener("click",   () => applyCode());
   document.getElementById("undo-btn")?.addEventListener("click",   doUndo);

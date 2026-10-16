@@ -3373,8 +3373,8 @@ mark.find-match.current-match {
   }
 }
 
-/* ─── Mermaid Diagrams ─────────────────────────────────────────────────────── */
-#writer-view .mermaid-block {
+/* ─── Diagrams ─────────────────────────────────────────────────────────────── */
+#writer-view .diagram-block {
   position: relative;
   margin: 1.25rem 0;
   border: 1px solid var(--border);
@@ -3385,14 +3385,14 @@ mark.find-match.current-match {
   user-select: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-#writer-view .mermaid-block:hover,
-#writer-view .mermaid-block.editing {
+#writer-view .diagram-block:hover,
+#writer-view .diagram-block.editing {
   border-color: var(--cyan);
   box-shadow: 0 4px 18px rgba(139, 233, 253, 0.08);
 }
-#writer-view .mermaid-block.has-error { border-left-color: var(--red); }
+#writer-view .diagram-block.has-error { border-left-color: var(--red); }
 
-#writer-view .mermaid-toolbar {
+#writer-view .diagram-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3404,11 +3404,11 @@ mark.find-match.current-match {
   opacity: 0.6;
   transition: opacity 0.2s ease;
 }
-#writer-view .mermaid-block:hover .mermaid-toolbar,
-#writer-view .mermaid-block.editing .mermaid-toolbar { opacity: 1; }
-#writer-view .mermaid-label { color: var(--cyan); letter-spacing: 0.03em; }
+#writer-view .diagram-block:hover .diagram-toolbar,
+#writer-view .diagram-block.editing .diagram-toolbar { opacity: 1; }
+#writer-view .diagram-label { color: var(--cyan); letter-spacing: 0.03em; }
 
-#writer-view .mermaid-edit-btn {
+#writer-view .diagram-edit-btn {
   font: inherit;
   color: var(--fg);
   background: var(--bg-elevated);
@@ -3418,9 +3418,9 @@ mark.find-match.current-match {
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-#writer-view .mermaid-edit-btn:hover { background: var(--cyan); color: var(--bg); }
+#writer-view .diagram-edit-btn:hover { background: var(--cyan); color: var(--bg); }
 
-#writer-view .mermaid-source-editor {
+#writer-view .diagram-source-editor {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -3440,20 +3440,97 @@ mark.find-match.current-match {
   user-select: text;
 }
 
-#writer-view .mermaid-diagram {
+#writer-view .diagram-view {
   display: flex;
   justify-content: center;
   padding: 1rem;
   overflow-x: auto;
   cursor: default;
 }
-#writer-view .mermaid-diagram svg { max-width: 100%; height: auto; }
+#writer-view .diagram-view svg { max-width: 100%; height: auto; }
 
-#writer-view .mermaid-error-msg:empty { display: none; }
-#writer-view .mermaid-error-msg {
+#writer-view .diagram-error-msg:empty { display: none; }
+#writer-view .diagram-error-msg {
   padding: 0.5rem 1rem 0.8rem;
   font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--red);
   white-space: pre-wrap;
 }
+
+/* Per-engine accent colours */
+#writer-view .diagram-block.diagram-plantuml { border-left-color: var(--orange); }
+#writer-view .diagram-block.diagram-d2       { border-left-color: var(--purple); }
+#writer-view .diagram-block.diagram-markmap  { border-left-color: var(--green); }
+#writer-view .diagram-block.diagram-svgbob   { border-left-color: var(--yellow); }
+#writer-view .diagram-plantuml .diagram-label { color: var(--orange); }
+#writer-view .diagram-d2 .diagram-label       { color: var(--purple); }
+#writer-view .diagram-markmap .diagram-label  { color: var(--green); }
+#writer-view .diagram-svgbob .diagram-label   { color: var(--yellow); }
+#writer-view .diagram-block.has-error { border-left-color: var(--red); }
+
+/* Rendering indicator (external renderers can take a moment) */
+#writer-view .diagram-block.rendering .diagram-label::after {
+  content: " · rendering…";
+  color: var(--text-muted);
+  animation: diagram-pulse 1.2s ease-in-out infinite;
+}
+@keyframes diagram-pulse { 50% { opacity: 0.35; } }
+#writer-view .diagram-block.rendering .diagram-view { opacity: 0.6; transition: opacity 0.2s ease; }
+
+/* Svgbob text diagrams follow the theme's text colour */
+#writer-view .diagram-svgbob .diagram-view { color: var(--fg); }
+#writer-view .diagram-svgbob .diagram-view svg text { fill: currentColor; }
+
+/* Markmap */
+#writer-view .diagram-markmap .diagram-view { display: block; padding: 0.5rem; }
+#writer-view .diagram-markmap .markmap-svg {
+  width: 100%;
+  display: block;
+  --markmap-text-color: var(--fg);
+  --markmap-code-bg: var(--bg-elevated);
+  --markmap-code-color: var(--fg);
+  --markmap-circle-open-bg: var(--bg-sidebar);
+  --markmap-font: 400 14px/18px var(--font-sans);
+  color: var(--fg);
+}
+
+/* Insert-diagram popover */
+.diagram-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 230px;
+  padding: 0.35rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  animation: diagram-menu-in 0.14s ease-out;
+}
+.diagram-menu.hidden { display: none; }
+@keyframes diagram-menu-in { from { opacity: 0; transform: translateY(-4px); } }
+.diagram-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.65rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: 500 0.82rem var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.diagram-menu-item code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.diagram-menu-item:hover,
+.diagram-menu-item:focus-visible { background: var(--active-file-bg); color: var(--accent); outline: none; }
