@@ -90,18 +90,41 @@ async fn open_file_dialog() -> Option<FileData> {
 /// Opens a native save dialog asynchronously (desktop only).
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-async fn save_file_dialog(content: String) -> Option<String> {
+async fn save_file_dialog(content: String, default_name: Option<String>) -> Result<Option<String>, String> {
+    // Only use the final path component of the suggested name.
+    let suggested = default_name
+        .as_deref()
+        .and_then(|n| Path::new(n.trim()).file_name())
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "untitled.md".to_string());
     let file = AsyncFileDialog::new()
         .add_filter("Markdown", &["md", "markdown", "txt"])
+        .add_filter("All Files", &["*"])
+        .set_file_name(&suggested)
         .save_file()
         .await;
 
     if let Some(handle) = file {
         let path = handle.path().to_path_buf();
-        let _ = fs::write(&path, content.as_bytes());
-        return Some(path.to_string_lossy().into_owned());
+        fs::write(&path, content.as_bytes())
+            .map_err(|e| format!("Could not write {}: {e}", path.display()))?;
+        return Ok(Some(path.to_string_lossy().into_owned()));
     }
+    Ok(None)
+}
+
+// Android uses the Storage Access Framework via the dialog/fs plugins instead.
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn open_file_dialog() -> Option<FileData> {
     None
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn save_file_dialog(_content: String, _default_name: Option<String>) -> Result<Option<String>, String> {
+    Err("Native save dialog is not available on Android".into())
 }
 
 // ── Shared file storage directory ─────────────────────────────────────────────
@@ -367,6 +390,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             parse_markdown,
+            open_file_dialog,
+            save_file_dialog,
             get_platform,
             get_cli_args,
             get_files_dir,

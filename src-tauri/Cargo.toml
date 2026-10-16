@@ -1,6 +1,6 @@
 [package]
 name = "artfultype-rs"
-version = "0.30.9"
+version = "0.30.10"
 description = "ArtfulType Pro — Distraction-free Markdown & Code Editor"
 authors = ["Roland"]
 edition = "2021"

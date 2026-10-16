@@ -4082,7 +4082,7 @@ async function saveSingleFile(f) {
       renderTabBar(); renderFileList();
       return true;
     } else {
-      const savedPath = await invoke("save_file_dialog", { content: f.content });
+      const savedPath = await invoke("save_file_dialog", { content: f.content, defaultName: f.name });
       if (savedPath) {
         const oldId = f.id;
         f.path = savedPath;
@@ -4339,7 +4339,7 @@ async function saveFile(silent = false) {
       await saveNextcloudAs(f, content, silent);
     } else {
       if (!silent) statusMessageEl.textContent = "Saving…";
-      const savedPath = await invoke("save_file_dialog", { content });
+      const savedPath = await invoke("save_file_dialog", { content, defaultName: f.name });
       if (savedPath) {
         f.path = savedPath;
         f.id = savedPath;
@@ -4382,7 +4382,7 @@ async function saveFileAs(silent = false) {
       return;
     }
     if (!silent) statusMessageEl.textContent = "Saving As…";
-    const savedPath = await invoke("save_file_dialog", { content });
+    const savedPath = await invoke("save_file_dialog", { content, defaultName: f.name });
     if (savedPath) {
       f.path = savedPath;
       f.id = savedPath;
