@@ -44,10 +44,14 @@ const LANG_MAP = {
   "md": "markdown", "markdown": "markdown",
   // python
   "py": "python", "python": "python", "pyw": "python", "sc": "python", "sconstruct": "python", "sconscript": "python", "tac": "python",
+  // r & rmarkdown
+  "r": "r", "rmd": "markdown", "rscript": "r", "s": "r",
   // sql
   "sql": "sql",
   // tex
   "tex": "tex", "latex": "tex", "aux": "tex", "toc": "tex",
+  // vega & vega-lite
+  "vega": "js", "vl": "js", "vegalite": "js", "vega-lite": "js", "json": "js",
   // xml
   "xml": "xml", "xsl": "xml", "rss": "xml", "xsd": "xml", "wsdl": "xml",
   // yaml
@@ -193,10 +197,26 @@ const GRAMMARS = {
   ]),
 
   markdown: buildGrammar([
+    ["syn-comment",  /^---[\s\S]*?---|^---\s*$|^\+\+\+[\s\S]*?\+\+\+|^;;;[\s\S]*?;;;|^Title:.*$/m],
     ["syn-keyword",  /^#{1,6}\s+[^\n]*/m],
+    ["syn-keyword",  /^:::[^\n]*/m],
+    ["syn-function", /```\s*\{?[a-zA-Z0-9_-]+[^\n]*|```/],
+    ["syn-variable", /\$\$[\s\S]+?\$\$|\$[^$\n]+\$/],
     ["syn-string",   /``[^`]+``|`[^`]+`/],
-    ["syn-function", /!{0,1}\[[^\]]*\]\([^)]*\)/],
-    ["syn-comment",  /^\s*[-*+]\s+|^\s*\d+\.\s+/m]
+    ["syn-attr",     /\{[+~-]{2}[\s\S]*?[+~-]{2}\}|\{>>[\s\S]*?<<\}|\{==[\s\S]*?==\}|==[^=\n]+==|\^\[[^\]]+\]/],
+    ["syn-type",     /!{0,1}\[\[[^\]]+\]\]|\[[@#][a-zA-Z0-9_:-]+(?:,\s*[^\]]+)?\]|(?<!\w)@[a-zA-Z0-9_:-]+/],
+    ["syn-function", /\[[^\]]+\]\{[^{}]+\}|!{0,1}\[[^\]]*\](?:\([^)]*\)|\[[^\]]*\])/],
+    ["syn-tag",      /<\/?(?:[A-Z][a-zA-Z0-9_-]*|[a-z][a-z0-9_-]*)(?:\s+[^>]*)?\/?>/],
+    ["syn-comment",  /^\s*[-*+]\s+\[[ xX]\]|^\s*[-*+]\s+|^\s*\d+\.\s+|^\s*:\s+/m]
+  ]),
+
+  r: buildGrammar([
+    ["syn-comment",  /#[^\n]*/],
+    ["syn-string",   /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/],
+    ["syn-keyword",  /\b(?:function|if|else|repeat|while|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA|NA_integer_|NA_real_|NA_complex_|NA_character_|return|library|require|source|attach|detach)\b/],
+    ["syn-function", /\b(?:c|list|data\.frame|matrix|array|factor|summary|plot|print|cat|paste|paste0|sprintf|apply|lapply|sapply|vapply|tapply|head|tail|str|dim|nrow|ncol|colnames|rownames|which|subset|merge|order|sort|mean|median|sd|var|cor|lm|glm|predict|set\.seed)\b(?=\s*\()/],
+    ["syn-variable", /%[a-zA-Z0-9._]+%|%>%|%in%|<-(?!-)|<<-|->|->>/],
+    ["syn-number",   /\b0x[0-9a-fA-F]+\b|\b\d+(\.\d+)?[eE]?[+-]?\d*[iL]?\b/]
   ]),
 
   python: buildGrammar([

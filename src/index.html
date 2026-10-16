@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/vendor/katex.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -19,6 +20,7 @@
         alert("Unhandled Promise Rejection: " + event.reason);
       });
     </script>
+    <script src="/vendor/katex.min.js" defer></script>
     <script src="/highlighter.js" defer></script>
     <script src="/vendor/mermaid.min.js" defer></script>
     <script type="module" src="/main.js" defer></script>
@@ -47,11 +49,12 @@
             <button id="tui-menu-edit-btn" class="tui-menu-btn"><u>E</u>dit</button>
             <button id="tui-menu-format-btn" class="tui-menu-btn">F<u>o</u>rmat</button>
             <button id="tui-menu-view-btn" class="tui-menu-btn"><u>V</u>iew</button>
+            <button id="tui-menu-compat-btn" class="tui-menu-btn"><u>C</u>ompatibility</button>
             <button id="tui-menu-help-btn" class="tui-menu-btn"><u>H</u>elp</button>
           </nav>
         </div>
         <div class="header-center">
-          <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.10</span></span>
+          <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.11</span></span>
         </div>
         <div class="header-right" style="display: flex; align-items: center; gap: 8px;">
           <button id="global-save-btn" class="icon-btn" title="Save File (Ctrl+S)">
@@ -400,12 +403,118 @@
 
 
 
+    <div id="tui-compat-menu" class="dropdown-menu tui-dropdown compat-dropdown hidden">
+      <div class="compat-header-row">
+        <span class="compat-header-title">Markdown Standards</span>
+        <span id="compat-active-counter" class="compat-counter-badge">9/9 Active</span>
+      </div>
+      <div class="compat-note-row">
+        <span>Baseline CommonMark is always active. Select standards:</span>
+      </div>
+      <label class="menu-item compat-item" for="compat-gfm">
+        <input type="checkbox" id="compat-gfm" data-compat="gfm" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">GitHub Flavored (GFM)</span>
+            <span class="compat-badge badge-gfm">GFM</span>
+          </div>
+          <span class="compat-desc">Tables, task lists, alerts, strikethrough, autolinks</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-pkm">
+        <input type="checkbox" id="compat-pkm" data-compat="pkm" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Note-Taking &amp; PKM</span>
+            <span class="compat-badge badge-pkm">PKM</span>
+          </div>
+          <span class="compat-desc">Wikilinks [[Title]], transclusions ![[embed]], highlighting ==text==</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-pandoc">
+        <input type="checkbox" id="compat-pandoc" data-compat="pandoc" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Pandoc Extensions</span>
+            <span class="compat-badge badge-pandoc">Pandoc</span>
+          </div>
+          <span class="compat-desc">Fenced divs :::, spans [text]{.class}, @citations, inline ^[fn]</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-extra">
+        <input type="checkbox" id="compat-extra" data-compat="markdown_extra" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Markdown Extra</span>
+            <span class="compat-badge badge-extra">Extra</span>
+          </div>
+          <span class="compat-desc">Definition lists, heading attributes {#id}, abbreviations, footnotes</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-mmd">
+        <input type="checkbox" id="compat-mmd" data-compat="multimarkdown" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">MultiMarkdown</span>
+            <span class="compat-badge badge-mmd">MMD</span>
+          </div>
+          <span class="compat-desc">LaTeX math ($$, $), sub/superscript, CriticMarkup, MMD meta</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-rmd">
+        <input type="checkbox" id="compat-rmd" data-compat="rmarkdown" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">R Markdown</span>
+            <span class="compat-badge badge-rmd">Rmd</span>
+          </div>
+          <span class="compat-desc">R/polyglot code chunks ```{r}, execution headers</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-frontmatter">
+        <input type="checkbox" id="compat-frontmatter" data-compat="frontmatter" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Frontmatter Formats</span>
+            <span class="compat-badge badge-frontmatter">Meta</span>
+          </div>
+          <span class="compat-desc">YAML (---), TOML (+++), JSON (;;;), MultiMarkdown headers</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-smart">
+        <input type="checkbox" id="compat-smart" data-compat="smart_typography" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Smart Typography</span>
+            <span class="compat-badge badge-smart">Type</span>
+          </div>
+          <span class="compat-desc">SmartyPants curly quotes (“ ”), dashes (–, —), ellipses (…)</span>
+        </div>
+      </label>
+      <label class="menu-item compat-item" for="compat-html">
+        <input type="checkbox" id="compat-html" data-compat="html_passthrough" checked />
+        <div class="compat-label-wrap">
+          <div class="compat-name-row">
+            <span class="compat-name">Raw HTML Passthrough</span>
+            <span class="compat-badge badge-html">HTML</span>
+          </div>
+          <span class="compat-desc">Allow raw HTML/SVG tags (unchecked = sanitize &lt;script&gt;)</span>
+        </div>
+      </label>
+      <div class="compat-actions-bar">
+        <button id="compat-select-all-btn" class="compat-act-btn" type="button">Select All</button>
+        <button id="compat-select-none-btn" class="compat-act-btn" type="button">Baseline Only</button>
+        <button id="compat-reset-btn" class="compat-act-btn" type="button">Reset</button>
+      </div>
+    </div>
+
     <div id="tui-help-menu" class="dropdown-menu tui-dropdown hidden">
       <button id="tui-help-about" class="menu-item"><span>ℹ️ About ArtfulType Pro</span></button>
     </div>
 
     <!-- Main Dropdown Menu -->
     <div id="main-menu" class="dropdown-menu hidden">
+      <button id="menu-compat-btn" class="menu-item"><span>⚙️ Markdown Compatibility…</span></button>
       <button id="menu-about-btn" class="menu-item">About</button>
       <button id="menu-prefs-btn" class="menu-item">Preferences</button>
     </div>

@@ -1,6 +1,6 @@
 # ArtfulType Pro
 
-A distraction-free Markdown & Code editor built natively for modern desktop environments (**macOS**, **Linux**, and **Windows**) and the terminal using **Rust** and **Tauri**. 
+A distraction-free Markdown & Code editor built natively for modern desktop environments (**macOS**, **Linux**, and **Windows**) and the terminal using **Rust** and **Tauri**.
 
 > 💡 **Looking for the classic Macintosh version?**  
 > If you're looking for the original System 6/7 68k Mac edition or the Mac OS X 10.5 PowerPC Leopard edition, visit the original repository at [github.com/darkcruix2/ArtfulType](https://github.com/darkcruix2/ArtfulType).
@@ -41,6 +41,12 @@ A distraction-free Markdown & Code editor built natively for modern desktop envi
 - **Markdown mode** — raw syntax editing
 - **Pure Text / Code mode** (`F5` / `-t`) — distraction-free coding and plain text editing with toggleable real-time syntax highlighting (`F6` / `Ctrl+H`) and smart auto-indentation
 - **☁ Nextcloud Cloud Integration** — link Nextcloud storage via WebDAV, browse remote directory structures, edit and auto-save directly to Nextcloud in both GUI (`artfultype-rs`) and TUI (`art`)
+- **Comprehensive Markdown Standards Compatibility**:
+  - **[CommonMark](https://commonmark.org/)**: Fully compliant ATX & Setext headings, nested blockquotes, loose/tight lists, code spans/fences, and thematic breaks.
+  - **[GitHub Flavored Markdown (GFM)](https://github.github.com/gfm/)**: Column-aligned tables, interactive task lists, strikethrough (`~~text~~`), autolinks, and GFM alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`).
+  - **[Markdown Extra](https://michelf.ca/projects/php-markdown/extra/)**: Definition lists (`Term\n: Definition`), heading attributes (`{#id .class}`), footnotes, and abbreviations (`*[HTML]: Hyper Text Markup Language`).
+  - **[MultiMarkdown](https://fletcherpenney.net/multimarkdown/)**: Frontmatter metadata headers, LaTeX math (`$...$` & `$$...$$` rendered natively via bundled KaTeX), subscript (`~sub~`), superscript (`^sup^`), CriticMarkup (`{++add++}`, `{--del--}`, `{~~old~>new~~}`, `{>>comment<<}`, `{==mark==}`), and citations (`[#citekey]`).
+  - **[R Markdown](https://rmarkdown.rstudio.com/)**: YAML frontmatter blocks, R and polyglot code chunks (```` ```{r setup, echo=TRUE} ````), inline code execution (`` `r Sys.Date()` ``), Pandoc citations (`[@author2020]`), cross-references (`\@ref(fig:name)`), and fenced callouts (`::: {.callout-note}`).
 - **Native File I/O** — Open/Save local plain Markdown & code files
 - **Themes & Aesthetics** — Dark mode glassmorphism, Dracula, Retro Green/Amber, DOS Edit, VT100 ASCII modes
 - **Cross-Platform** — Native performance on Linux (x86_64), macOS (ARM64), and Windows 11 (x64)

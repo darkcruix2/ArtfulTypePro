@@ -3534,3 +3534,600 @@ mark.find-match.current-match {
 }
 .diagram-menu-item:hover,
 .diagram-menu-item:focus-visible { background: var(--active-file-bg); color: var(--accent); outline: none; }
+
+/* ─── Extended Markdown Flavors Support (CommonMark, GFM, Extra, MMD, RMD) ──── */
+
+/* 1. YAML / TOML / MultiMarkdown Frontmatter Card */
+.frontmatter-block {
+  margin: 0.5rem 0 1.5rem 0;
+  padding: 0.75rem 1rem;
+  background: rgba(30, 32, 48, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(189, 147, 249, 0.25);
+  border-left: 4px solid var(--purple, #bd93f9);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.frontmatter-block:hover {
+  border-color: rgba(189, 147, 249, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.frontmatter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  user-select: none;
+}
+.frontmatter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(189, 147, 249, 0.18);
+  color: var(--purple, #bd93f9);
+}
+.frontmatter-raw {
+  margin: 0 !important;
+  padding: 0.5rem 0.75rem !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-radius: 6px;
+  font-size: 0.82rem !important;
+  line-height: 1.45 !important;
+  overflow-x: auto;
+}
+.frontmatter-raw code {
+  color: var(--fg, #f8f8f2) !important;
+  font-family: var(--font-mono);
+}
+
+/* 2. Markdown Extra & MultiMarkdown Definition Lists */
+#writer-view dl {
+  margin: 1.2rem 0;
+  padding-left: 0.25rem;
+}
+#writer-view dt {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--cyan, #8be9fd);
+  margin-top: 0.9rem;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+}
+#writer-view dt:first-child {
+  margin-top: 0;
+}
+#writer-view dd {
+  margin-left: 1.6rem;
+  margin-top: 0.3rem;
+  margin-bottom: 0.6rem;
+  color: var(--fg, #f8f8f2);
+  line-height: 1.6;
+  position: relative;
+}
+#writer-view dd::before {
+  content: "•";
+  position: absolute;
+  left: -1.1rem;
+  color: var(--comment, #6272a4);
+  font-weight: bold;
+}
+
+/* 3. LaTeX Math (MultiMarkdown & R Markdown) */
+.math-inline {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 0 3px;
+  font-family: "KaTeX_Math", "Times New Roman", serif;
+  color: var(--yellow, #f1fa8c);
+}
+.math-display {
+  display: block;
+  margin: 1.25rem auto;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  background: rgba(20, 22, 34, 0.5);
+  border: 1px solid rgba(241, 250, 140, 0.2);
+  border-radius: 8px;
+  overflow-x: auto;
+  color: var(--yellow, #f1fa8c);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+.katex-display {
+  margin: 1rem 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+}
+
+/* 4. R Markdown Code Chunks */
+.code-chunk {
+  position: relative;
+  margin: 1.25rem 0;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 233, 253, 0.25);
+  background: rgba(18, 20, 30, 0.8) !important;
+  overflow: hidden;
+}
+.code-chunk-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(40, 42, 54, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  user-select: none;
+}
+.code-chunk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  background: rgba(139, 233, 253, 0.2);
+  color: var(--cyan, #8be9fd);
+}
+.code-chunk-options {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--comment, #6272a4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inline-code-chunk {
+  background: rgba(139, 233, 253, 0.15);
+  border: 1px solid rgba(139, 233, 253, 0.3);
+  color: var(--cyan, #8be9fd);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+/* 5. CriticMarkup (MultiMarkdown) */
+.critic {
+  border-radius: 3px;
+  padding: 1px 3px;
+  font-size: 0.95em;
+}
+.critic-add, ins.critic {
+  background: rgba(80, 250, 123, 0.2);
+  color: var(--green, #50fa7b);
+  text-decoration: underline;
+  text-decoration-color: rgba(80, 250, 123, 0.6);
+}
+.critic-del, del.critic {
+  background: rgba(255, 85, 85, 0.2);
+  color: var(--red, #ff5555);
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+.critic-sub {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.critic-old {
+  background: rgba(255, 85, 85, 0.18);
+  color: var(--red, #ff5555);
+  text-decoration: line-through;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.critic-new {
+  background: rgba(80, 250, 123, 0.18);
+  color: var(--green, #50fa7b);
+  text-decoration: underline;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.critic-comment {
+  background: rgba(189, 147, 249, 0.2);
+  color: var(--purple, #bd93f9);
+  border: 1px solid rgba(189, 147, 249, 0.35);
+  font-size: 0.85em;
+  padding: 2px 6px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.critic-highlight, mark.critic {
+  background: rgba(241, 250, 140, 0.3);
+  color: var(--fg, #f8f8f2);
+  border-bottom: 2px solid var(--yellow, #f1fa8c);
+  padding: 1px 4px;
+}
+
+/* 6. Citations & Cross-References (MultiMarkdown & R Markdown) */
+.citation {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: rgba(139, 233, 253, 0.14);
+  border: 1px solid rgba(139, 233, 253, 0.35);
+  color: var(--cyan, #8be9fd);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  font-style: normal;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.citation:hover {
+  background: rgba(139, 233, 253, 0.25);
+  border-color: var(--cyan, #8be9fd);
+  transform: translateY(-1px);
+}
+.cross-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: rgba(255, 121, 198, 0.15);
+  border: 1px solid rgba(255, 121, 198, 0.35);
+  color: var(--pink, #ff79c6);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.cross-ref:hover {
+  background: rgba(255, 121, 198, 0.28);
+  border-color: var(--pink, #ff79c6);
+}
+
+/* 7. Markdown Extra Abbreviations */
+abbr[title] {
+  text-decoration: underline dotted var(--cyan, #8be9fd);
+  text-underline-offset: 3px;
+  cursor: help;
+  transition: color 0.15s ease;
+}
+abbr[title]:hover {
+  color: var(--cyan, #8be9fd);
+}
+
+/* ─── Markdown Standards Compatibility Menu ─────────────────────────────── */
+.compat-dropdown {
+  min-width: 320px;
+  max-width: 380px;
+  padding: 8px 10px;
+  background: var(--bg-surface, #21222c);
+  border: 1px solid var(--border, #44475a);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  z-index: 1000;
+}
+
+.compat-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--border, #44475a);
+  margin-bottom: 6px;
+}
+
+.compat-header-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--foreground, #f8f8f2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.compat-counter-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--selection, #44475a);
+  color: var(--purple, #bd93f9);
+}
+
+.compat-item {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 10px;
+  padding: 8px 10px !important;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+  margin-bottom: 2px;
+}
+
+.compat-item:hover {
+  background: var(--selection, rgba(68, 71, 90, 0.5)) !important;
+}
+
+.compat-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--comment, #6272a4);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  margin-top: 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.compat-item input[type="checkbox"]:checked {
+  background: var(--purple, #bd93f9);
+  border-color: var(--purple, #bd93f9);
+}
+
+.compat-item input[type="checkbox"]:checked::after {
+  content: "✓";
+  color: #282a36;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.compat-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.compat-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.compat-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--foreground, #f8f8f2);
+}
+
+.compat-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.compat-note-row {
+  padding: 4px 6px 8px;
+  font-size: 0.72rem;
+  color: var(--comment, #6272a4);
+  border-bottom: 1px solid var(--border, #44475a);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.compat-badge.badge-pkm         { background: rgba(80, 250, 123, 0.2); color: #50fa7b; }
+.compat-badge.badge-pandoc      { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
+.compat-badge.badge-frontmatter { background: rgba(139, 233, 253, 0.2); color: #8be9fd; }
+.compat-badge.badge-smart       { background: rgba(241, 250, 140, 0.2); color: #f1fa8c; }
+.compat-badge.badge-html        { background: rgba(255, 121, 198, 0.2); color: #ff79c6; }
+
+/* ─── Modern PKM & Note-Taking Standards ───────────────────────────── */
+a.wikilink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(189, 147, 249, 0.15);
+  color: var(--purple, #bd93f9);
+  text-decoration: none;
+  font-weight: 500;
+  border: 1px solid rgba(189, 147, 249, 0.3);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+a.wikilink:hover {
+  background: rgba(189, 147, 249, 0.25);
+  border-color: var(--purple, #bd93f9);
+  color: #f8f8f2;
+  text-decoration: underline;
+}
+
+.wikilink-icon {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+/* Transclusions */
+.transclusion-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border, #44475a);
+  margin: 8px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.transclusion-card {
+  margin: 12px 0;
+  border: 1px dashed var(--purple, #bd93f9);
+  border-radius: 8px;
+  background: var(--bg-sidebar, #21222c);
+  overflow: hidden;
+}
+
+.transclusion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(189, 147, 249, 0.12);
+  border-bottom: 1px dashed rgba(189, 147, 249, 0.3);
+}
+
+.transclusion-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--purple, #bd93f9);
+  color: #282a36;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.transclusion-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--foreground, #f8f8f2);
+}
+
+.transclusion-content {
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  color: var(--comment, #6272a4);
+}
+
+/* Text Highlighting */
+mark.pkm-highlight {
+  background: rgba(241, 250, 140, 0.35);
+  color: var(--foreground, #f8f8f2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border-bottom: 2px solid #f1fa8c;
+}
+
+/* ─── Pandoc Extensions & Technical Documentation ──────────────────── */
+.pandoc-span {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(98, 114, 164, 0.15);
+  border: 1px solid rgba(98, 114, 164, 0.3);
+}
+
+.pandoc-span.badge-danger {
+  background: rgba(255, 85, 85, 0.2);
+  color: #ff5555;
+  border-color: #ff5555;
+}
+
+.pandoc-span.badge-success {
+  background: rgba(80, 250, 123, 0.2);
+  color: #50fa7b;
+  border-color: #50fa7b;
+}
+
+.fenced-div {
+  margin: 14px 0;
+  padding: 12px 16px;
+  border-left: 4px solid var(--purple, #bd93f9);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-sidebar, #21222c);
+  border-top: 1px solid var(--border, rgba(68, 71, 90, 0.5));
+  border-right: 1px solid var(--border, rgba(68, 71, 90, 0.5));
+  border-bottom: 1px solid var(--border, rgba(68, 71, 90, 0.5));
+}
+
+.fenced-div.fenced-div-warning {
+  border-left-color: #ffb86c;
+  background: rgba(255, 184, 108, 0.05);
+}
+
+.fenced-div.fenced-div-danger, .fenced-div.fenced-div-caution {
+  border-left-color: #ff5555;
+  background: rgba(255, 85, 85, 0.05);
+}
+
+.fenced-div.fenced-div-note, .fenced-div.fenced-div-info {
+  border-left-color: #8be9fd;
+  background: rgba(139, 233, 253, 0.05);
+}
+
+.fenced-div.fenced-div-tip, .fenced-div.fenced-div-success {
+  border-left-color: #50fa7b;
+  background: rgba(80, 250, 123, 0.05);
+}
+
+.inline-footnote-ref a {
+  color: var(--pink, #ff79c6);
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0 2px;
+}
+
+.inline-footnote-ref a:hover {
+  text-decoration: underline;
+}
+
+/* ─── MDX / Component Support ───────────────────────────────────────── */
+.mdx-component-card {
+  margin: 12px 0;
+  border: 1px solid rgba(139, 233, 253, 0.35);
+  border-radius: 8px;
+  background: var(--bg-sidebar, #21222c);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.mdx-component-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(139, 233, 253, 0.1);
+  border-bottom: 1px solid rgba(139, 233, 253, 0.2);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.mdx-badge {
+  background: #8be9fd;
+  color: #282a36;
+  font-weight: 700;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.mdx-name {
+  color: #8be9fd;
+  font-weight: 600;
+}
+
+.mdx-props {
+  color: var(--comment, #6272a4);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdx-component-body {
+  padding: 12px 14px;
+}
+
+
+

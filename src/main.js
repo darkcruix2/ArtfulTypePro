@@ -3,11 +3,42 @@ const invoke = window.__TAURI__?.core?.invoke || (async (cmd, args) => {
   if (cmd === "parse_markdown") {
     // Basic fallback HTML converter for standalone browser preview
     if (!args || !args.text) return "";
-    let lines = args.text.split("\n");
+    const compat = args.compat || DEFAULT_MARKDOWN_COMPAT;
+    
+    // Check if any extension is selected
+    const hasAnyExtension = compat.gfm || compat.pkm || compat.pandoc || compat.markdown_extra || compat.multimarkdown || compat.rmarkdown || compat.frontmatter || compat.smart_typography;
+
+    if (!compat.commonmark && !hasAnyExtension) {
+      return args.text.split("\n").map(l => l.trim() ? `<p>${escapeHtml(l)}</p>` : `<p><br></p>`).join("\n");
+    }
+
+    let text = args.text;
+
+    // Frontmatter
+    let frontmatterHtml = "";
+    if (compat.frontmatter) {
+      if (text.startsWith(";;;")) {
+        const end = text.indexOf("\n;;;");
+        if (end !== -1) {
+          const json = text.slice(3, end).trim();
+          frontmatterHtml = `<div class="frontmatter-block" data-frontmatter-kind="json" contenteditable="false"><div class="frontmatter-header"><span class="frontmatter-badge">JSON Frontmatter</span></div><pre class="frontmatter-raw"><code class="language-json">${escapeHtml(json)}</code></pre></div>\n`;
+          text = text.slice(end + 4);
+        }
+      } else if (text.startsWith("---")) {
+        const end = text.indexOf("\n---", 3);
+        if (end !== -1) {
+          const yml = text.slice(3, end).trim();
+          frontmatterHtml = `<div class="frontmatter-block" data-frontmatter-kind="yaml" contenteditable="false"><div class="frontmatter-header"><span class="frontmatter-badge">YAML Metadata</span></div><pre class="frontmatter-raw"><code class="language-yaml">${escapeHtml(yml)}</code></pre></div>\n`;
+          text = text.slice(end + 4);
+        }
+      }
+    }
+
+    let lines = text.split("\n");
     let inList = false;
     let htmlLines = [];
     for (let line of lines) {
-      const taskMatch = line.match(/^(\s*)[\-\*\+]\s+\[([ xX])\]\s+(.*)$/);
+      const taskMatch = compat.gfm ? line.match(/^(\s*)[\-\*\+]\s+\[([ xX])\]\s+(.*)$/) : null;
       if (taskMatch) {
         if (!inList) { htmlLines.push('<ul class="contains-task-list">'); inList = true; }
         const checked = taskMatch[2].toLowerCase() === "x" ? 'checked=""' : '';
@@ -22,15 +53,61 @@ const invoke = window.__TAURI__?.core?.invoke || (async (cmd, args) => {
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
-      .replace(/==([^=\n]+)==/gim, '<mark>$1</mark>')
-      .replace(/~~([^~\n]+)~~/gim, '<del>$1</del>')
-      .replace(/(?<!~)~([^~\n]+)~(?!~)/gim, '<sub>$1</sub>')
-      .replace(/(?<!\^)\^([^\^\n]+)\^(?!\^)/gim, '<sup>$1</sup>')
-      .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/gim, '<em>$1</em>')
-      .replace(/\n\n/g, '</p><p>');
-    return '<p>' + html + '</p>';
+      .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+    if (compat.pkm) {
+      html = html.replace(/==([^=\n]+)==/gim, '<mark class="pkm-highlight">$1</mark>');
+      html = html.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, opt) => {
+        const lower = target.toLowerCase();
+        if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.svg') || lower.endsWith('.webp')) {
+          return `<img class="transclusion-image" src="${escapeHtml(target.trim())}" alt="${escapeHtml(target.trim())}" />`;
+        }
+        return `<div class="transclusion-card" data-transclude="${escapeHtml(target.trim())}"><div class="transclusion-header"><span class="transclusion-badge">Transclusion</span><span class="transclusion-title">📄 ${escapeHtml(target.trim())}</span></div><div class="transclusion-content">Embedded note: <em>${escapeHtml(target.trim())}</em></div></div>`;
+      });
+      html = html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, alias) => {
+        const label = (alias || target).trim();
+        return `<a class="wikilink" data-wikilink="${escapeHtml(target.trim())}" href="#note:${escapeHtml(target.trim())}"><span class="wikilink-icon">📄</span> <span class="wikilink-label">${escapeHtml(label)}</span></a>`;
+      });
+    }
+
+    if (compat.pandoc) {
+      html = html.replace(/\[([^\]\n]+)\]\{([^{}\n]+)\}/g, (m, t, attrs) => {
+        let classes = [];
+        let idAttr = "";
+        for (let part of attrs.trim().split(/\s+/)) {
+          if (part.startsWith('.')) classes.push(part.slice(1));
+          else if (part.startsWith('#')) idAttr = ` id="${escapeHtml(part.slice(1))}"`;
+        }
+        const clsAttr = classes.length ? ` ${classes.join(' ')}` : '';
+        return `<span class="pandoc-span${clsAttr}"${idAttr}>${t}</span>`;
+      });
+      html = html.replace(/\[(@[a-zA-Z0-9_:-]+(?:,\s*[^\]]+)?(?:;\s*@[a-zA-Z0-9_:-]+)*)\]/g, '<cite class="citation citation-pandoc" data-cite="$1">$1</cite>');
+      html = html.replace(/(^|[^\w@])@([a-zA-Z0-9_:-]+)/g, '$1<cite class="citation citation-pandoc" data-cite="$2">@$2</cite>');
+    }
+
+    if (compat.smart_typography) {
+      html = html
+        .replace(/---/g, "—")
+        .replace(/--/g, "–")
+        .replace(/\.\.\./g, "…")
+        .replace(/"([^"\n]+)"/g, "“$1”");
+    }
+
+    if (compat.gfm) {
+      html = html.replace(/~~([^~\n]+)~~/gim, '<del>$1</del>');
+    }
+    if (compat.multimarkdown) {
+      html = html
+        .replace(/(?<!~)~([^~\n]+)~(?!~)/gim, '<sub>$1</sub>')
+        .replace(/(?<!\^)\^([^\^\n]+)\^(?!\^)/gim, '<sup>$1</sup>');
+    }
+    if (compat.commonmark) {
+      html = html
+        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*)\*/gim, '<em>$1</em>');
+    }
+    html = html.replace(/\n\n/g, '</p><p>');
+    return frontmatterHtml + '<p>' + html + '</p>';
   }
   return null;
 });
@@ -58,6 +135,42 @@ let autoSaveTimer = null;
 const RECENT_KEY    = "artfultype-recent-v1";
 const RECENT_MAX    = 10;
 const SETTINGS_KEY  = "artfultype-settings-v1";
+const COMPAT_STORAGE_KEY = "artfultype_markdown_compat_v1";
+
+const DEFAULT_MARKDOWN_COMPAT = {
+  commonmark: true,
+  gfm: true,
+  pkm: true,
+  pandoc: true,
+  markdown_extra: true,
+  multimarkdown: true,
+  rmarkdown: true,
+  frontmatter: true,
+  smart_typography: true,
+  html_passthrough: true
+};
+
+let currentMarkdownCompat = { ...DEFAULT_MARKDOWN_COMPAT };
+
+function loadMarkdownCompat() {
+  try {
+    const raw = localStorage.getItem(COMPAT_STORAGE_KEY);
+    if (raw) {
+      currentMarkdownCompat = { ...DEFAULT_MARKDOWN_COMPAT, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.error("Error loading markdown compat:", e);
+  }
+}
+
+function saveMarkdownCompat() {
+  try {
+    localStorage.setItem(COMPAT_STORAGE_KEY, JSON.stringify(currentMarkdownCompat));
+  } catch (e) {
+    console.error("Error saving markdown compat:", e);
+  }
+}
+
 
 // ─── Debounce ─────────────────────────────────────────────────────────────────
 function debounce(fn, wait) {
@@ -558,6 +671,11 @@ function admonitionToMd(node) {
   const contentEl = node.querySelector(".admonition-content") || node;
   const inner = nodeToMd(contentEl, true).trim();
 
+  if (node.dataset.calloutStyle === "fenced-div") {
+    const titleAttr = titleHeader ? ` title=${titleHeader.trim()}` : "";
+    return `::: {.callout-${type.toLowerCase()}${titleAttr}}\n${inner}\n:::\n\n`;
+  }
+
   const lines = [`> [!${type}]${titleHeader}`];
   if (inner) {
     inner.split("\n").forEach(l => lines.push(`> ${l}`));
@@ -617,15 +735,43 @@ function nodeToMd(node, insideBlock = false) {
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
   const tag = node.tagName.toLowerCase();
   const children = (ib = insideBlock) => Array.from(node.childNodes).map(n => nodeToMd(n, ib)).join("");
+  function getHeadingAttrs(n) {
+    const parts = [];
+    if (n.id) parts.push(`#${n.id}`);
+    if (n.classList && n.classList.length) {
+      for (const c of n.classList) {
+        if (c && !c.startsWith("heading-") && c !== "writer-h" && c !== "heading") {
+          parts.push(`.${c}`);
+        }
+      }
+    }
+    return parts.length ? ` {${parts.join(" ")}}` : "";
+  }
+
   switch (tag) {
-    case "h1": return `# ${children(true).trim()}\n\n`;
-    case "h2": return `## ${children(true).trim()}\n\n`;
-    case "h3": return `### ${children(true).trim()}\n\n`;
-    case "h4": return `#### ${children(true).trim()}\n\n`;
-    case "h5": return `##### ${children(true).trim()}\n\n`;
-    case "h6": return `###### ${children(true).trim()}\n\n`;
+    case "h1": return `# ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
+    case "h2": return `## ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
+    case "h3": return `### ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
+    case "h4": return `#### ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
+    case "h5": return `##### ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
+    case "h6": return `###### ${children(true).trim()}${getHeadingAttrs(node)}\n\n`;
     case "p":  return `${children()}\n\n`;
     case "br": return "  \n";
+    // Markdown Extra & MultiMarkdown Definition Lists
+    case "dl": {
+      let dlMd = "";
+      for (const child of Array.from(node.children)) {
+        const ct = child.tagName.toLowerCase();
+        if (ct === "dt") {
+          dlMd += `${nodeToMd(child, true).trim()}\n`;
+        } else if (ct === "dd") {
+          dlMd += `:   ${nodeToMd(child, true).trim()}\n`;
+        }
+      }
+      return dlMd ? `${dlMd.trimEnd()}\n\n` : "";
+    }
+    case "dt": return children(true);
+    case "dd": return children(true);
     // Fix 1: Bold+Italic — detect <strong><em> or <em><strong> nesting → ***text***
     case "strong": case "b": {
       const inner = children(true);
@@ -646,9 +792,23 @@ function nodeToMd(node, insideBlock = false) {
       }
       return `*${inner}*`;
     }
-    case "del": case "s": return `~~${children(true)}~~`;
+    case "ins": {
+      if (node.classList.contains("critic-add") || node.classList.contains("critic") || node.classList.contains("critic-new")) {
+        return `{++${children(true)}++}`;
+      }
+      return `<ins>${children(true)}</ins>`;
+    }
+    case "del": case "s": {
+      if (node.classList.contains("critic-del") || node.classList.contains("critic-old")) {
+        return `{--${children(true)}--}`;
+      }
+      return `~~${children(true)}~~`;
+    }
     case "mark": {
       if (node.classList.contains("find-match")) return children(true);
+      if (node.classList.contains("critic-highlight") || node.classList.contains("critic")) {
+        return `{==${children(true)}==}`;
+      }
       return `==${children(true)}==`;
     }
     case "code": {
@@ -661,7 +821,7 @@ function nodeToMd(node, insideBlock = false) {
     }
     case "pre": {
       const codeEl = node.querySelector("code");
-      const lang = codeEl ? codeEl.className.replace(/language-/, "").trim() : "";
+      const fenceInfo = node.dataset.codeInfo || (codeEl ? codeEl.className.replace(/language-/, "").trim() : "");
       // Walk child nodes so <br> → "\n" and text nodes → their text.
       // .textContent misses <br>-based line breaks (BR contributes "" to textContent).
       const source = codeEl || node;
@@ -679,7 +839,7 @@ function nodeToMd(node, insideBlock = false) {
       });
       // Strip WebKit-inserted leading/trailing BR artefacts.
       codeText = codeText.replace(/^\n+/, "").replace(/\n+$/, "");
-      return `\n\n\`\`\`${lang}\n${codeText}\n\`\`\`\n\n`;
+      return `\n\n\`\`\`${fenceInfo}\n${codeText}\n\`\`\`\n\n`;
     }
     // Fix 3: Preserve link title attribute
     case "a": {
@@ -828,10 +988,55 @@ function nodeToMd(node, insideBlock = false) {
         const fenceLang = node.dataset.diagramFence ?? node.dataset.diagramEngine ?? "";
         return `\n\n\`\`\`${fenceLang}\n${src}\n\`\`\`\n\n`;
       }
+      if (node.classList.contains("frontmatter-block")) {
+        const code = node.querySelector("code")?.textContent || "";
+        const kind = node.dataset.frontmatterKind || "yaml";
+        if (kind === "yaml") return `---\n${code.trim()}\n---\n\n`;
+        if (kind === "toml") return `+++\n${code.trim()}\n+++\n\n`;
+        if (kind === "mmd") return `${code.trim()}\n\n`;
+        return `---\n${code.trim()}\n---\n\n`;
+      }
+      if (node.classList.contains("math-display")) {
+        const raw = node.dataset.mathRaw || node.textContent.trim();
+        return `\n\n$$\n${raw}\n$$\n\n`;
+      }
       const inner = children();
       return inner.endsWith("\n") ? inner : inner + "\n";
     }
-    case "span": return children();
+    case "span": {
+      if (node.classList.contains("math-inline") || node.classList.contains("math")) {
+        const raw = node.dataset.mathRaw || node.textContent.trim();
+        return `$${raw}$`;
+      }
+      if (node.classList.contains("math-display")) {
+        const raw = node.dataset.mathRaw || node.textContent.trim();
+        return `\n\n$$\n${raw}\n$$\n\n`;
+      }
+      if (node.classList.contains("critic-sub")) {
+        const oldText = node.querySelector(".critic-old")?.textContent || "";
+        const newText = node.querySelector(".critic-new")?.textContent || "";
+        return `{~~${oldText}~>${newText}~~}`;
+      }
+      if (node.classList.contains("critic-comment")) {
+        const comment = node.dataset.commentText || node.textContent.replace(/^💬\s*/, "").trim();
+        return `{>>${comment}<<}`;
+      }
+      if (node.classList.contains("citation")) {
+        return `[${node.dataset.cite || children(true)}]`;
+      }
+      if (node.classList.contains("cross-ref")) {
+        return `\\@ref(${node.dataset.ref || children(true)})`;
+      }
+      return children();
+    }
+    case "abbr": {
+      const title = node.getAttribute("title") || "";
+      const text = node.textContent.trim();
+      if (title && text && !docAbbreviations.some(a => a.abbr === text)) {
+        docAbbreviations.push({ abbr: text, title });
+      }
+      return text;
+    }
     case "script": case "style": return "";
     default: return children();
   }
@@ -902,7 +1107,36 @@ function htmlToMarkdown(el) {
   if (uniqueFnLines.length > 0) {
     md += "\n\n" + uniqueFnLines.join("\n");
   }
+
+  if (docAbbreviations && docAbbreviations.length > 0) {
+    const seenAbbrs = new Set();
+    const uniqueAbbrLines = [];
+    for (const a of docAbbreviations) {
+      if (a.abbr && a.title && !seenAbbrs.has(a.abbr)) {
+        seenAbbrs.add(a.abbr);
+        uniqueAbbrLines.push(`*[${a.abbr}]: ${a.title.trim()}`);
+      }
+    }
+    if (uniqueAbbrLines.length > 0) {
+      md += "\n\n" + uniqueAbbrLines.join("\n");
+    }
+  }
+
   return md;
+}
+
+// ─── Abbreviations Manager (Markdown Extra) ──────────────────────────────────
+let docAbbreviations = [];
+
+function parseAbbreviationsFromMarkdown(mdText) {
+  const abbrs = [];
+  if (!mdText) return abbrs;
+  const rx = /^\*\[([^\]]+)\]:\s*(.*)$/gm;
+  let m;
+  while ((m = rx.exec(mdText)) !== null) {
+    abbrs.push({ abbr: m[1], title: m[2].trim() });
+  }
+  return abbrs;
 }
 
 // ─── Footnote Manager & Drawer ────────────────────────────────────────────────
@@ -917,13 +1151,21 @@ function getNextFootnoteId() {
   return String(maxNum + 1);
 }
 
-function parseFootnotesFromMarkdown(mdText) {
+function parseFootnotesFromMarkdown(mdText, compat = currentMarkdownCompat) {
   const fns = [];
   if (!mdText) return fns;
   const rx = /^\[\^([^\]]+)\]:\s*(.*)$/gm;
   let m;
   while ((m = rx.exec(mdText)) !== null) {
     fns.push({ id: m[1], text: m[2] });
+  }
+  if (compat?.pandoc) {
+    const inlineRx = /\^\[([^\]]+)\]/g;
+    let inlineCount = 0;
+    while ((m = inlineRx.exec(mdText)) !== null) {
+      inlineCount++;
+      fns.push({ id: `inline-${inlineCount}`, text: m[1], isInline: true });
+    }
   }
   return fns;
 }
@@ -1154,6 +1396,25 @@ app -> file: saves`,
                    .-----------.
                   (   Diagram   )
                    '-----------'`,
+  vega: `{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "ArtfulType Pro — Standards Overview",
+  "data": {
+    "values": [
+      {"standard": "CommonMark", "count": 10},
+      {"standard": "GFM", "count": 15},
+      {"standard": "PKM", "count": 12},
+      {"standard": "Pandoc", "count": 14},
+      {"standard": "Extra", "count": 8},
+      {"standard": "MMD", "count": 11}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "standard", "type": "nominal", "axis": {"labelAngle": 0}},
+    "y": {"field": "count", "type": "quantitative"}
+  }
+}`,
 };
 
 let diagramSeq = 0;
@@ -1413,7 +1674,115 @@ const DIAGRAM_ENGINES = {
     render: async (target, src) => mountSanitizedSvg(target,
       await cachedInvoke("render_svgbob", { source: src })),
   },
+  vega: {
+    label: "◇ vega",
+    menuLabel: "Vega / Vega-Lite",
+    fences: ["vega", "vegalite", "vega-lite", "vl"],
+    detect: (src) => looksLikeVega(src),
+    render: async (target, src) => renderVegaInto(target, src),
+  },
 };
+
+function looksLikeVega(src) {
+  const trimmed = (src || "").trim();
+  return trimmed.startsWith("{") && (trimmed.includes("vega") || trimmed.includes('"mark"') || trimmed.includes('"encoding"'));
+}
+
+function generateVegaLiteSvg(spec, isDark = true) {
+  const width = 480;
+  const height = 240;
+  const padding = { top: 40, right: 30, bottom: 50, left: 60 };
+  const plotW = width - padding.left - padding.right;
+  const plotH = height - padding.top - padding.bottom;
+
+  const bg = isDark ? "#1e1f29" : "#ffffff";
+  const fg = isDark ? "#f8f8f2" : "#282a36";
+  const muted = isDark ? "#6272a4" : "#999999";
+  const grid = isDark ? "#282a36" : "#e0e0e0";
+  const barColor = isDark ? "#bd93f9" : "#6272a4";
+  const accent = isDark ? "#ff79c6" : "#ff5555";
+
+  const mark = typeof spec.mark === "string" ? spec.mark : spec.mark?.type || "bar";
+  const values = Array.isArray(spec.data?.values) ? spec.data.values : [];
+  const xField = spec.encoding?.x?.field || "x";
+  const yField = spec.encoding?.y?.field || "y";
+  const title = spec.title || spec.description || "Vega-Lite Visualization";
+
+  let innerSvg = "";
+
+  if (values.length > 0) {
+    const yVals = values.map(v => Number(v[yField]) || 0);
+    const maxY = Math.max(...yVals, 1);
+
+    if (mark === "line" || mark === "area") {
+      const points = values.map((v, i) => {
+        const x = padding.left + (i / Math.max(values.length - 1, 1)) * plotW;
+        const val = Number(v[yField]) || 0;
+        const y = padding.top + plotH - (val / maxY) * plotH;
+        return `${x},${y}`;
+      }).join(" ");
+
+      if (mark === "area") {
+        const firstX = padding.left;
+        const lastX = padding.left + plotW;
+        const baseY = padding.top + plotH;
+        innerSvg += `<polygon points="${firstX},${baseY} ${points} ${lastX},${baseY}" fill="${barColor}" fill-opacity="0.25" />`;
+      }
+      innerSvg += `<polyline points="${points}" fill="none" stroke="${barColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+      values.forEach((v, i) => {
+        const x = padding.left + (i / Math.max(values.length - 1, 1)) * plotW;
+        const val = Number(v[yField]) || 0;
+        const y = padding.top + plotH - (val / maxY) * plotH;
+        innerSvg += `<circle cx="${x}" cy="${y}" r="4" fill="${accent}" />`;
+        innerSvg += `<text x="${x}" y="${padding.top + plotH + 18}" fill="${muted}" font-size="11" text-anchor="middle" font-family="monospace">${escapeHtml(String(v[xField]))}</text>`;
+      });
+    } else {
+      const barW = Math.max(16, (plotW / values.length) * 0.65);
+      const step = plotW / values.length;
+
+      values.forEach((v, i) => {
+        const val = Number(v[yField]) || 0;
+        const bH = (val / maxY) * plotH;
+        const x = padding.left + i * step + (step - barW) / 2;
+        const y = padding.top + plotH - bH;
+
+        innerSvg += `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="3" fill="${barColor}" />`;
+        innerSvg += `<text x="${x + barW / 2}" y="${y - 6}" fill="${fg}" font-size="11" text-anchor="middle" font-weight="600" font-family="monospace">${val}</text>`;
+        innerSvg += `<text x="${x + barW / 2}" y="${padding.top + plotH + 18}" fill="${muted}" font-size="11" text-anchor="middle" font-family="monospace">${escapeHtml(String(v[xField]))}</text>`;
+      });
+    }
+  } else {
+    innerSvg += `<text x="${width / 2}" y="${height / 2}" fill="${muted}" text-anchor="middle" font-family="sans-serif">No data values specified</text>`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" style="background:${bg}; border-radius:6px; max-width:100%; height:auto;">
+    <text x="${padding.left}" y="${24}" fill="${fg}" font-size="13" font-weight="600" font-family="sans-serif">${escapeHtml(title)}</text>
+    <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + plotH}" stroke="${grid}" stroke-width="1" />
+    <line x1="${padding.left}" y1="${padding.top + plotH}" x2="${padding.left + plotW}" y2="${padding.top + plotH}" stroke="${grid}" stroke-width="1" />
+    <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left + plotW}" y2="${padding.top}" stroke="${grid}" stroke-dasharray="3 3" opacity="0.4" />
+    <line x1="${padding.left}" y1="${padding.top + plotH / 2}" x2="${padding.left + plotW}" y2="${padding.top + plotH / 2}" stroke="${grid}" stroke-dasharray="3 3" opacity="0.4" />
+    ${innerSvg}
+  </svg>`;
+}
+
+async function renderVegaInto(target, src) {
+  let spec;
+  try {
+    spec = JSON.parse(src);
+  } catch (err) {
+    throw new Error(`Vega JSON syntax error: ${err.message}`);
+  }
+  if (window.vegaEmbed) {
+    await window.vegaEmbed(target, spec, {
+      theme: isLightBackground() ? "latimes" : "dark",
+      actions: false,
+      renderer: "svg",
+    });
+    return;
+  }
+  const svg = generateVegaLiteSvg(spec, !isLightBackground());
+  mountSanitizedSvg(target, svg);
+}
 
 const DIAGRAM_FENCE_TO_ENGINE = new Map(
   Object.entries(DIAGRAM_ENGINES).flatMap(([k, e]) => e.fences.map(f => [f, k])));
@@ -1755,16 +2124,20 @@ function toggleDiagramMenu(anchorBtn) {
 
 async function renderMarkdownToWriter(markdownText) {
   try {
-    docFootnotes = parseFootnotesFromMarkdown(markdownText);
-    const html = await invoke("parse_markdown", { text: markdownText });
+    const compat = currentMarkdownCompat || DEFAULT_MARKDOWN_COMPAT;
+    docFootnotes = (compat.markdown_extra || compat.multimarkdown || compat.pandoc) ? parseFootnotesFromMarkdown(markdownText, compat) : [];
+    docAbbreviations = compat.markdown_extra ? parseAbbreviationsFromMarkdown(markdownText) : [];
+    const html = await invoke("parse_markdown", { text: markdownText, compat });
     writerViewEl.innerHTML = html;
     await fixImageSrcs(writerViewEl);
     applySyntaxHighlighting(writerViewEl);
     await enhanceWriterDiagrams(writerViewEl);
-    enhanceWriterTaskLists(writerViewEl);
-    enhanceWriterFootnotes();
-    enhanceWriterExtendedSyntax(writerViewEl);
-    enhanceWriterAdmonitions(writerViewEl);
+    if (compat.gfm) enhanceWriterTaskLists(writerViewEl);
+    if (compat.markdown_extra || compat.multimarkdown || compat.pandoc) enhanceWriterFootnotes();
+    enhanceWriterExtendedSyntax(writerViewEl, compat);
+    enhanceWriterAdmonitions(writerViewEl, compat);
+    if (compat.multimarkdown || compat.rmarkdown) renderWriterMath(writerViewEl);
+    if (compat.rmarkdown) enhanceWriterCodeChunks(writerViewEl);
   } catch (e) {
     writerViewEl.innerHTML = `<p style="color:var(--red)">Render error: ${e}</p>`;
   }
@@ -1867,13 +2240,13 @@ function enhanceWriterFootnotes() {
   renderFootnoteDrawer();
 }
 
-function enhanceWriterExtendedSyntax(container = writerViewEl) {
+function enhanceWriterExtendedSyntax(container = writerViewEl, compat = currentMarkdownCompat) {
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       let p = node.parentElement;
       while (p && p !== container) {
         const t = p.tagName.toLowerCase();
-        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || p.classList?.contains("diagram-block") || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes")) {
+        if (t === "code" || t === "pre" || t === "script" || t === "style" || t === "sup" || t === "sub" || t === "mark" || t === "abbr" || t === "cite" || p.classList?.contains("diagram-block") || p.classList?.contains("footnote-reference") || p.classList?.contains("footnote-ref") || p.classList?.contains("footnote-definition") || p.classList?.contains("footnotes") || p.classList?.contains("frontmatter-block") || p.classList?.contains("code-chunk") || p.classList?.contains("math") || p.classList?.contains("katex")) {
           return NodeFilter.FILTER_REJECT;
         }
         p = p.parentElement;
@@ -1888,15 +2261,109 @@ function enhanceWriterExtendedSyntax(container = writerViewEl) {
   for (const node of nodes) {
     const text = node.textContent;
     if (!text) continue;
-    if (!text.includes("==") && !text.includes("~") && !text.includes("^")) continue;
 
-    let html = text
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/==([^=\n]+)==/g, '<mark>$1</mark>')
-      .replace(/(?<!~)~([^~\n]+)~(?!~)/g, '<sub>$1</sub>')
-      .replace(/(?<!\^)\^([^\^\n]+)\^(?!\^)/g, '<sup>$1</sup>');
+    let html = escapeHtml(text);
 
-    if (html !== text) {
+    // 1. CriticMarkup (MultiMarkdown)
+    if (compat?.multimarkdown) {
+      html = html
+        .replace(/\{\+\+([\s\S]*?)\+\+\}/g, '<ins class="critic critic-add">$1</ins>')
+        .replace(/\{--([\s\S]*?)--\}/g, '<del class="critic critic-del">$1</del>')
+        .replace(/\{~~([\s\S]*?)~&gt;([\s\S]*?)~~\}/g, '<span class="critic critic-sub"><del class="critic-old">$1</del><ins class="critic-new">$2</ins></span>')
+        .replace(/\{&gt;&gt;([\s\S]*?)&lt;&lt;\}/g, '<span class="critic critic-comment" data-comment-text="$1" title="CriticMarkup Comment"><span class="critic-icon">💬</span> $1</span>')
+        .replace(/\{==([\s\S]*?)==\}/g, '<mark class="critic critic-highlight">$1</mark>');
+    }
+
+    // 2. PKM Standards: Highlighting & Wikilinks & Transclusions
+    if (compat?.pkm) {
+      html = html.replace(/==([^=\n]+)==/g, '<mark class="pkm-highlight">$1</mark>');
+
+      // Transclusions: ![[image.png]] or ![[image.png|300]] or ![[Embedded Note]]
+      html = html.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, opt) => {
+        const clean = target.trim();
+        const lower = clean.toLowerCase();
+        if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.svg') || lower.endsWith('.webp')) {
+          let style = "";
+          if (opt && /^\d+$/.test(opt.trim())) {
+            style = ` style="max-width:${opt.trim()}px;"`;
+          }
+          return `<img class="transclusion-image" src="${escapeHtml(clean)}" alt="${escapeHtml(clean)}"${style} />`;
+        }
+        return `<div class="transclusion-card" data-transclude="${escapeHtml(clean)}"><div class="transclusion-header"><span class="transclusion-badge">Transclusion</span><span class="transclusion-title">📄 ${escapeHtml(clean)}</span></div><div class="transclusion-content">Embedded note: <em>${escapeHtml(clean)}</em></div></div>`;
+      });
+
+      // Wikilinks: [[Note]] or [[Note|Alias]]
+      html = html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, alias) => {
+        const cleanTarget = target.trim();
+        const label = (alias || cleanTarget).trim();
+        return `<a class="wikilink" data-wikilink="${escapeHtml(cleanTarget)}" href="#note:${escapeHtml(cleanTarget)}" title="Navigate to note: ${escapeHtml(cleanTarget)}"><span class="wikilink-icon">📄</span> <span class="wikilink-label">${escapeHtml(label)}</span></a>`;
+      });
+    }
+
+    // 3. Pandoc Extensions: Spans, Citations, Inline Footnotes
+    if (compat?.pandoc) {
+      html = html.replace(/\[([^\]\n]+)\]\{([^{}\n]+)\}/g, (m, spanText, attrs) => {
+        let classes = [];
+        let idAttr = "";
+        for (let part of attrs.trim().split(/\s+/)) {
+          if (part.startsWith('.')) classes.push(part.slice(1));
+          else if (part.startsWith('#')) idAttr = ` id="${escapeHtml(part.slice(1))}"`;
+        }
+        const clsAttr = classes.length ? ` ${classes.join(' ')}` : '';
+        return `<span class="pandoc-span${clsAttr}"${idAttr}>${spanText}</span>`;
+      });
+
+      html = html.replace(/\[(@[a-zA-Z0-9_:-]+(?:,\s*[^\]]+)?(?:;\s*@[a-zA-Z0-9_:-]+)*)\]/g, '<cite class="citation citation-pandoc" data-cite="$1">$1</cite>');
+      html = html.replace(/(^|[^\w@])@([a-zA-Z0-9_:-]+)/g, '$1<cite class="citation citation-pandoc" data-cite="$2">@$2</cite>');
+
+      html = html.replace(/\^\[([^\]]+)\]/g, (m, fnText) => {
+        return `<sup class="footnote-ref inline-footnote-ref" title="${escapeHtml(fnText)}"><a href="#footnote-drawer" title="Inline Footnote: ${escapeHtml(fnText)}">[*]</a></sup>`;
+      });
+    }
+
+    // 4. MultiMarkdown Math, Subscript, Superscript, Citations
+    if (compat?.multimarkdown) {
+      html = html
+        .replace(/(?<!~)~([^~\n\s]+)~(?!~)/g, '<sub>$1</sub>')
+        .replace(/(?<!\^)\^([^\^\n\s]+)\^(?!\^)/g, '<sup>$1</sup>');
+      html = html.replace(/\[#([a-zA-Z0-9_:-]+(?:,\s*[^\]]+)?)\]/g, '<cite class="citation citation-mmd" data-cite="#$1">#$1</cite>');
+    }
+
+    // 5. R Markdown Citations & Cross-references
+    if (compat?.rmarkdown) {
+      html = html.replace(/\\@ref\(([a-zA-Z0-9_:-]+)\)/g, '<a class="cross-ref" data-ref="$1" href="#$1">🔗 $1</a>');
+    }
+
+    // 6. Smart Typography
+    if (compat?.smart_typography) {
+      html = html
+        .replace(/---/g, "—")
+        .replace(/--/g, "–")
+        .replace(/\.\.\./g, "…")
+        .replace(/"([^"\n]+)"/g, "“$1”");
+    }
+
+    // 7. MDX / Component Support
+    html = html.replace(/<([A-Z][a-zA-Z0-9_.-]*)([^>]*)>(.*?)<\/\1>/gs, (m, name, props, body) => {
+      const p = props.trim() ? ` ${escapeHtml(props.trim())}` : '';
+      return `<div class="mdx-component-card" data-component-name="${name}"><div class="mdx-component-header"><span class="mdx-badge">⚛️ MDX</span><span class="mdx-name">&lt;${name}&gt;</span><span class="mdx-props">${p}</span></div><div class="mdx-component-body">${body}</div></div>`;
+    });
+    html = html.replace(/<([A-Z][a-zA-Z0-9_.-]*)([^>]*)\s*\/>/g, (m, name, props) => {
+      const p = props.trim() ? ` ${escapeHtml(props.trim())}` : '';
+      return `<div class="mdx-component-card" data-component-name="${name}"><div class="mdx-component-header"><span class="mdx-badge">⚛️ MDX</span><span class="mdx-name">&lt;${name} /&gt;</span><span class="mdx-props">${p}</span></div></div>`;
+    });
+
+    // 8. Abbreviations (Markdown Extra)
+    if (compat?.markdown_extra && docAbbreviations && docAbbreviations.length > 0) {
+      for (const a of docAbbreviations) {
+        if (!a.abbr) continue;
+        const escapedAbbr = a.abbr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const abbrRegex = new RegExp(`\\b${escapedAbbr}\\b`, 'g');
+        html = html.replace(abbrRegex, `<abbr title="${escapeHtml(a.title)}">${a.abbr}</abbr>`);
+      }
+    }
+
+    if (html !== escapeHtml(text)) {
       const span = document.createElement("span");
       span.innerHTML = html;
       node.parentNode.replaceChild(span, node);
@@ -1906,9 +2373,59 @@ function enhanceWriterExtendedSyntax(container = writerViewEl) {
       span.parentNode.removeChild(span);
     }
   }
+
+  // 6. Inline execution chunks: `r expr`, `python expr`
+  if (compat?.rmarkdown) {
+    container.querySelectorAll("code:not(pre code)").forEach(codeEl => {
+      if (codeEl.textContent.match(/^(r|python|bash|julia)\s+/i)) {
+        codeEl.classList.add("inline-code-chunk");
+      }
+    });
+  }
 }
 
-function enhanceWriterAdmonitions(container = writerViewEl) {
+function renderWriterMath(container = writerViewEl) {
+  if (!container) return;
+  const mathNodes = container.querySelectorAll(".math-inline, .math-display");
+  mathNodes.forEach(el => {
+    const raw = el.dataset.mathRaw || el.textContent.trim();
+    if (!raw) return;
+    el.dataset.mathRaw = raw;
+    const isDisplay = el.classList.contains("math-display") || el.tagName.toLowerCase() === "div";
+    if (window.katex) {
+      try {
+        window.katex.render(raw, el, {
+          displayMode: isDisplay,
+          throwOnError: false,
+          output: "htmlAndMathml"
+        });
+        el.classList.add("katex-rendered");
+      } catch (e) {
+        console.warn("KaTeX error:", e);
+      }
+    }
+  });
+}
+
+function enhanceWriterCodeChunks(container = writerViewEl) {
+  if (!container) return;
+  const chunks = container.querySelectorAll("pre.code-chunk");
+  chunks.forEach(chunk => {
+    if (!chunk.querySelector(".code-chunk-header")) {
+      const info = chunk.dataset.codeInfo || "";
+      const langMatch = info.match(/^\{?\.?([a-zA-Z0-9_-]+)/);
+      const lang = langMatch ? langMatch[1] : "code";
+      const badgeText = lang.toLowerCase() === "r" ? "R Chunk" : `${lang.toUpperCase()} Chunk`;
+      const header = document.createElement("div");
+      header.className = "code-chunk-header";
+      header.contentEditable = "false";
+      header.innerHTML = `<span class="code-chunk-badge">${badgeText}</span><span class="code-chunk-options">${escapeHtml(info)}</span>`;
+      chunk.insertBefore(header, chunk.firstChild);
+    }
+  });
+}
+
+function enhanceWriterAdmonitions(container = writerViewEl, compat = currentMarkdownCompat) {
   if (!container) return;
 
   // 1. Process paragraphs / divs containing MkDocs admonition syntax: `!!! type "title"`
@@ -1963,93 +2480,155 @@ function enhanceWriterAdmonitions(container = writerViewEl) {
   }
 
   // 2. Process blockquotes for GFM callouts `> [!TYPE]` or `> **Note:** text`
-  const blockquotes = Array.from(container.querySelectorAll("blockquote"));
-  const calloutRegex = /^\s*\[\!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|DANGER|BUG|QUOTE|HINT)\](?:\s+(.*))?$/i;
-  const boldHeaderRegex = /^\s*\*\*?(Note|Tip|Important|Warning|Caution|Info|Success|Danger|Bug):\*\*?\s*(.*)$/i;
+  if (compat?.gfm) {
+    const blockquotes = Array.from(container.querySelectorAll("blockquote"));
+    const calloutRegex = /^\s*\[\!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|DANGER|BUG|QUOTE|HINT)\](?:\s+(.*))?$/i;
+    const boldHeaderRegex = /^\s*\*\*?(Note|Tip|Important|Warning|Caution|Info|Success|Danger|Bug):\*\*?\s*(.*)$/i;
 
-  for (const bq of blockquotes) {
-    if (bq.classList.contains("admonition")) continue;
+    for (const bq of blockquotes) {
+      if (bq.classList.contains("admonition")) continue;
 
-    const firstP = bq.querySelector("p") || bq;
-    const text = firstP.textContent || "";
-    const lines = text.split("\n");
-    const match = lines[0].match(calloutRegex);
-    const boldMatch = !match ? lines[0].match(boldHeaderRegex) : null;
+      const firstP = bq.querySelector("p") || bq;
+      const text = firstP.textContent || "";
+      const lines = text.split("\n");
+      const match = lines[0].match(calloutRegex);
+      const boldMatch = !match ? lines[0].match(boldHeaderRegex) : null;
 
-    if (match || boldMatch) {
-      const type = (match ? match[1] : boldMatch[1]).toUpperCase();
-      const defaultTitle = type.charAt(0) + type.slice(1).toLowerCase();
-      const icon = getAdmonitionIcon(type);
+      if (match || boldMatch) {
+        const type = (match ? match[1] : boldMatch[1]).toUpperCase();
+        const defaultTitle = type.charAt(0) + type.slice(1).toLowerCase();
+        const icon = getAdmonitionIcon(type);
 
-      let customTitle = defaultTitle;
+        let customTitle = defaultTitle;
 
-      if (match) {
-        const restLine1 = (match[2] || "").trim();
-        const hasMoreLines = lines.length > 1 || bq.children.length > 1;
+        if (match) {
+          const restLine1 = (match[2] || "").trim();
+          const hasMoreLines = lines.length > 1 || bq.children.length > 1;
 
-        if (restLine1.startsWith('"') && restLine1.endsWith('"') && restLine1.length > 2) {
-          customTitle = restLine1.slice(1, -1);
-          lines.shift();
-        } else if (hasMoreLines && restLine1) {
-          customTitle = restLine1;
-          lines.shift();
-        } else if (restLine1) {
+          if (restLine1.startsWith('"') && restLine1.endsWith('"') && restLine1.length > 2) {
+            customTitle = restLine1.slice(1, -1);
+            lines.shift();
+          } else if (hasMoreLines && restLine1) {
+            customTitle = restLine1;
+            lines.shift();
+          } else if (restLine1) {
+            customTitle = defaultTitle;
+            lines[0] = restLine1;
+          } else {
+            customTitle = defaultTitle;
+            lines.shift();
+          }
+        } else if (boldMatch) {
+          const restLine1 = boldMatch[2].trim();
           customTitle = defaultTitle;
-          lines[0] = restLine1;
-        } else {
-          customTitle = defaultTitle;
-          lines.shift();
+          if (restLine1) {
+            lines[0] = restLine1;
+          } else {
+            lines.shift();
+          }
         }
-      } else if (boldMatch) {
-        const restLine1 = boldMatch[2].trim();
-        customTitle = defaultTitle;
-        if (restLine1) {
-          lines[0] = restLine1;
-        } else {
-          lines.shift();
+
+        bq.className = `admonition admonition-${type.toLowerCase()}`;
+        bq.dataset.admonitionType = type;
+
+        const remText = lines.join("\n").trim();
+        if (firstP.tagName === "P") {
+          if (remText) {
+            firstP.textContent = remText;
+          } else {
+            firstP.remove();
+          }
         }
-      }
 
-      bq.className = `admonition admonition-${type.toLowerCase()}`;
-      bq.dataset.admonitionType = type;
-
-      const remText = lines.join("\n").trim();
-      if (firstP.tagName === "P") {
-        if (remText) {
-          firstP.textContent = remText;
-        } else {
-          firstP.remove();
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "admonition-content";
+        while (bq.firstChild) {
+          contentDiv.appendChild(bq.firstChild);
         }
+        if (!contentDiv.firstElementChild && !contentDiv.textContent.trim()) {
+          const p = document.createElement("p");
+          p.appendChild(document.createTextNode("\u200B"));
+          contentDiv.appendChild(p);
+        }
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = "admonition-header";
+        headerDiv.contentEditable = "false";
+
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "admonition-icon";
+        iconSpan.textContent = icon;
+        headerDiv.appendChild(iconSpan);
+
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "admonition-title";
+        titleSpan.contentEditable = "true";
+        titleSpan.textContent = customTitle;
+        headerDiv.appendChild(titleSpan);
+
+        bq.appendChild(headerDiv);
+        bq.appendChild(contentDiv);
       }
+    }
+  }
 
-      const contentDiv = document.createElement("div");
-      contentDiv.className = "admonition-content";
-      while (bq.firstChild) {
-        contentDiv.appendChild(bq.firstChild);
+  // 3. Process Pandoc / Quarto / R Markdown fenced divs & callouts: `::: warning` or `::: {.callout-type}`
+  if (compat?.pandoc || compat?.rmarkdown) {
+    const pList = Array.from(container.children);
+    const fencedStartRegex = /^\s*:::\s*(?:\{\.?(?:callout-)?([a-zA-Z0-9_-]+)(?:\s+(?:title="([^"]+)"|title='([^']+)'|(.*)))?\}|([a-zA-Z0-9_-]+)(?:\s+(?:title="([^"]+)"|title='([^']+)'|(.*)))?)\s*$/;
+    for (let i = 0; i < pList.length; i++) {
+      const el = pList[i];
+      if (el.tagName !== "P" && el.tagName !== "DIV") continue;
+      const t = (el.textContent || "").trim();
+      const m = t.match(fencedStartRegex);
+      if (m) {
+        const rawType = m[1] || m[5] || "note";
+        const type = rawType.toUpperCase();
+        const defaultTitle = type.charAt(0) + type.slice(1).toLowerCase();
+        const rawTitle = m[2] || m[3] || m[4] || m[6] || m[7] || m[8] || "";
+        const title = rawTitle.trim() || defaultTitle;
+        const icon = getAdmonitionIcon(type);
+
+        const isStandard = ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION", "INFO", "SUCCESS", "DANGER", "BUG", "QUOTE", "HINT"].includes(type);
+
+        const adm = document.createElement(isStandard ? "blockquote" : "div");
+        adm.className = isStandard ? `admonition admonition-${type.toLowerCase()}` : `fenced-div fenced-div-${type.toLowerCase()}`;
+        adm.dataset.admonitionType = type;
+        adm.dataset.calloutStyle = "fenced-div";
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = isStandard ? "admonition-header" : "fenced-div-header";
+        headerDiv.contentEditable = "false";
+        headerDiv.innerHTML = `<span class="${isStandard ? 'admonition-icon' : 'fenced-div-badge'}">${isStandard ? icon : type.toLowerCase()}</span><span class="${isStandard ? 'admonition-title' : 'fenced-div-title'}" contenteditable="true">${title}</span>`;
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = isStandard ? "admonition-content" : "fenced-div-content";
+
+        let next = el.nextElementSibling;
+        while (next) {
+          const nextText = (next.textContent || "").trim();
+          if (nextText === ":::") {
+            const closeEl = next;
+            next = next.nextElementSibling;
+            closeEl.remove();
+            break;
+          }
+          const toMove = next;
+          next = next.nextElementSibling;
+          contentDiv.appendChild(toMove);
+        }
+
+        if (!contentDiv.firstElementChild) {
+          const emptyP = document.createElement("p");
+          emptyP.appendChild(document.createTextNode("\u200B"));
+          contentDiv.appendChild(emptyP);
+        }
+
+        adm.appendChild(headerDiv);
+        adm.appendChild(contentDiv);
+        container.insertBefore(adm, el);
+        el.remove();
       }
-      if (!contentDiv.firstElementChild && !contentDiv.textContent.trim()) {
-        const p = document.createElement("p");
-        p.appendChild(document.createTextNode("\u200B"));
-        contentDiv.appendChild(p);
-      }
-
-      const headerDiv = document.createElement("div");
-      headerDiv.className = "admonition-header";
-      headerDiv.contentEditable = "false";
-
-      const iconSpan = document.createElement("span");
-      iconSpan.className = "admonition-icon";
-      iconSpan.textContent = icon;
-      headerDiv.appendChild(iconSpan);
-
-      const titleSpan = document.createElement("span");
-      titleSpan.className = "admonition-title";
-      titleSpan.contentEditable = "true";
-      titleSpan.textContent = customTitle;
-      headerDiv.appendChild(titleSpan);
-
-      bq.appendChild(headerDiv);
-      bq.appendChild(contentDiv);
     }
   }
 
@@ -4869,6 +5448,50 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // Click on wikilink in writer view navigates to note
+  writerViewEl.addEventListener("click", async (e) => {
+    const wikilink = e.target.closest("a.wikilink");
+    if (wikilink) {
+      e.preventDefault();
+      const targetNote = wikilink.dataset.wikilink;
+      if (!targetNote) return;
+
+      // 1. Check if note is currently open in openFiles
+      const match = openFiles.find(f => {
+        const fname = f.path ? f.path.split(/[/\\]/).pop() : f.name;
+        const baseName = fname ? fname.replace(/\.md$/i, "") : "";
+        const targetBase = targetNote.replace(/\.md$/i, "");
+        return fname === targetNote || fname === `${targetNote}.md` || baseName.toLowerCase() === targetBase.toLowerCase();
+      });
+      if (match) {
+        switchFile(match.id);
+        setStatus(`Switched to open note: ${targetNote}`);
+        return;
+      }
+
+      // 2. If in Tauri and directory is available, open or create file on disk
+      const dir = getCurrentFileDir();
+      if (dir && window.__TAURI__) {
+        const candidatePath = `${dir}/${targetNote.endsWith('.md') ? targetNote : targetNote + '.md'}`;
+        try {
+          const content = await invoke("read_file", { path: candidatePath });
+          addNewFile(targetNote.endsWith('.md') ? targetNote : `${targetNote}.md`, candidatePath, content);
+          setStatus(`Opened note: ${targetNote}`);
+          return;
+        } catch (_) {
+          // File does not exist yet: create new note
+          addNewFile(targetNote.endsWith('.md') ? targetNote : `${targetNote}.md`, candidatePath, `# ${targetNote}\n\n`);
+          setStatus(`Created new note: ${targetNote}`);
+          return;
+        }
+      }
+
+      // 3. Fallback: create new tab
+      addNewFile(targetNote.endsWith('.md') ? targetNote : `${targetNote}.md`, null, `# ${targetNote}\n\n`);
+      setStatus(`Opened new note: ${targetNote}`);
+    }
+  });
+
   // ── Table Controls ──
   document.getElementById("table-btn")?.addEventListener("click", toggleTableMenu);
   document.getElementById("table-insert-custom-btn")?.addEventListener("click", (e) => {
@@ -5085,6 +5708,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   const wordWrap = settings.wordWrap ?? true;
   applyWordWrapSetting(wordWrap);
 
+  // ── Markdown Standards Compatibility ──
+  initCompatibilityUI();
+
   // ── File list ──
   renderFileList();
 
@@ -5190,6 +5816,106 @@ function toggleTuiMenu(menuId, btnId) {
 function closeAllTuiMenus() {
   document.querySelectorAll(".tui-dropdown").forEach(m => m.classList.add("hidden"));
   document.querySelectorAll(".tui-menu-btn").forEach(b => b.classList.remove("active"));
+}
+
+function initCompatibilityUI() {
+  loadMarkdownCompat();
+
+  const compatMenu = document.getElementById("tui-compat-menu");
+  const compatBtn = document.getElementById("tui-menu-compat-btn");
+  const menuCompatBtn = document.getElementById("menu-compat-btn");
+
+  compatBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleTuiMenu("tui-compat-menu", "tui-menu-compat-btn");
+  });
+
+  menuCompatBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeAllTuiMenus();
+    document.getElementById("main-menu")?.classList.add("hidden");
+    toggleTuiMenu("tui-compat-menu", "tui-menu-compat-btn");
+  });
+
+  // Stop click events inside compatibility dropdown from closing it
+  compatMenu?.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  const checkboxes = {
+    gfm: document.getElementById("compat-gfm"),
+    pkm: document.getElementById("compat-pkm"),
+    pandoc: document.getElementById("compat-pandoc"),
+    markdown_extra: document.getElementById("compat-extra"),
+    multimarkdown: document.getElementById("compat-mmd"),
+    rmarkdown: document.getElementById("compat-rmd"),
+    frontmatter: document.getElementById("compat-frontmatter"),
+    smart_typography: document.getElementById("compat-smart"),
+    html_passthrough: document.getElementById("compat-html")
+  };
+
+  function syncCheckboxUI() {
+    let activeCount = 0;
+    const totalCount = Object.keys(checkboxes).length;
+    for (const [key, cb] of Object.entries(checkboxes)) {
+      if (cb) {
+        cb.checked = !!currentMarkdownCompat[key];
+        if (cb.checked) activeCount++;
+      }
+    }
+    const counter = document.getElementById("compat-active-counter");
+    if (counter) {
+      if (activeCount === 0) {
+        counter.textContent = `0/${totalCount} Active (Baseline Only)`;
+      } else {
+        counter.textContent = `${activeCount}/${totalCount} Active`;
+      }
+    }
+  }
+
+  syncCheckboxUI();
+
+  async function onCompatChanged() {
+    syncCheckboxUI();
+    saveMarkdownCompat();
+    if (currentViewMode === "writer" || currentViewMode === "split") {
+      let md = markdownInputEl.value;
+      if (!md && writerViewEl) {
+        md = htmlToMarkdown(writerViewEl);
+        markdownInputEl.value = md;
+      }
+      await renderMarkdownToWriter(md);
+    }
+  }
+
+  for (const [key, cb] of Object.entries(checkboxes)) {
+    cb?.addEventListener("change", async () => {
+      currentMarkdownCompat[key] = cb.checked;
+      await onCompatChanged();
+    });
+  }
+
+  document.getElementById("compat-select-all-btn")?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    Object.keys(currentMarkdownCompat).forEach(k => currentMarkdownCompat[k] = true);
+    await onCompatChanged();
+  });
+
+  document.getElementById("compat-select-none-btn")?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    // Baseline only: commonmark stays true, all extension standards set to false
+    for (const k of Object.keys(currentMarkdownCompat)) {
+      if (k === "commonmark") currentMarkdownCompat[k] = true;
+      else currentMarkdownCompat[k] = false;
+    }
+    await onCompatChanged();
+  });
+
+  document.getElementById("compat-reset-btn")?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    currentMarkdownCompat = { ...DEFAULT_MARKDOWN_COMPAT };
+    await onCompatChanged();
+  });
 }
 
 // ─── NEXTCLOUD INTEGRATION MODULE ────────────────────────────────────────────

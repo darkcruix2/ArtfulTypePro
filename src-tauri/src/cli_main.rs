@@ -294,7 +294,7 @@ fn is_code_file_extension(path_or_name: &str) -> bool {
         | "jsx" | "tsx" | "go" | "java" | "sh" | "bash" | "zsh" | "json" | "yaml" | "yml"
         | "toml" | "sql" | "css" | "html" | "htm" | "xml" | "cmake" | "make" | "pde" | "php"
         | "rb" | "kt" | "kts" | "swift" | "scala" | "cs" | "fs" | "elm" | "ex" | "exs" | "clj"
-        | "ps1" | "psm1" | "psd1" | "pwsh" | "powershell" => true,
+        | "ps1" | "psm1" | "psd1" | "pwsh" | "powershell" | "r" | "s" | "rscript" => true,
         _ => lower.ends_with("makefile") || lower.ends_with("cmakelists.txt") || lower.ends_with("dockerfile"),
     }
 }
@@ -3115,8 +3115,17 @@ fn render_writer_view(f: &mut ratatui::Frame, area: Rect, app: &App, colors: &Th
 
         let indent_prefix = " ".repeat(indent_len);
 
+        let clean_heading = |h_str: &str| -> String {
+            if let Some(pos) = h_str.rfind(" {#") {
+                if h_str.ends_with('}') {
+                    return h_str[..pos].trim_end().to_string();
+                }
+            }
+            h_str.to_string()
+        };
+
         if trimmed_start.starts_with("# ") {
-            plain_text = trimmed_start["# ".len()..].to_string();
+            plain_text = clean_heading(&trimmed_start["# ".len()..]);
             col_offset += 2;
             base_style = Style::default().fg(colors.header).add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
             sel_style = sel_style_bold_ul;
@@ -3124,7 +3133,7 @@ fn render_writer_view(f: &mut ratatui::Frame, area: Rect, app: &App, colors: &Th
                 icon_span = Some(Span::raw(indent_prefix));
             }
         } else if trimmed_start.starts_with("## ") {
-            plain_text = trimmed_start["## ".len()..].to_string();
+            plain_text = clean_heading(&trimmed_start["## ".len()..]);
             col_offset += 3;
             base_style = Style::default().fg(colors.accent).add_modifier(Modifier::BOLD);
             sel_style = sel_style_bold;
@@ -3132,10 +3141,58 @@ fn render_writer_view(f: &mut ratatui::Frame, area: Rect, app: &App, colors: &Th
                 icon_span = Some(Span::raw(indent_prefix));
             }
         } else if trimmed_start.starts_with("### ") {
-            plain_text = trimmed_start["### ".len()..].to_string();
+            plain_text = clean_heading(&trimmed_start["### ".len()..]);
             col_offset += 4;
             base_style = Style::default().fg(colors.quote).add_modifier(Modifier::BOLD);
             sel_style = sel_style_bold;
+            if indent_len > 0 {
+                icon_span = Some(Span::raw(indent_prefix));
+            }
+        } else if trimmed_start.starts_with("```") {
+            let fence_info = trimmed_start.trim_start_matches('`').trim();
+            plain_text = if fence_info.is_empty() {
+                format!("{ct} Code Block {ce}")
+            } else if fence_info.starts_with('{') {
+                format!("{ct} Chunk: {fence_info} {ce}")
+            } else {
+                format!("{ct} Code: {fence_info} {ce}")
+            };
+            base_style = Style::default().fg(colors.accent).add_modifier(Modifier::BOLD);
+            sel_style = sel_style_bold;
+            if indent_len > 0 {
+                icon_span = Some(Span::raw(indent_prefix));
+            }
+        } else if trimmed_start.starts_with(":::") && trimmed_start != ":::" {
+            let inner = trimmed_start.trim_start_matches(':').trim();
+            let div_name = if inner.starts_with("{.callout-") {
+                inner.trim_start_matches("{.callout-").trim_end_matches('}').trim()
+            } else if inner.starts_with('{') {
+                inner.trim_matches(|c: char| c == '{' || c == '}').trim()
+            } else {
+                inner
+            };
+            plain_text = format!("{ct} {} {ce}", div_name.to_uppercase());
+            base_style = Style::default().fg(colors.quote).add_modifier(Modifier::BOLD);
+            sel_style = sel_style_bold;
+            if indent_len > 0 {
+                icon_span = Some(Span::raw(indent_prefix));
+            }
+        } else if trimmed_start == ":::" {
+            plain_text = format!("{ce}{ce}");
+            base_style = Style::default().fg(colors.quote);
+            if indent_len > 0 {
+                icon_span = Some(Span::raw(indent_prefix));
+            }
+        } else if trimmed_start.starts_with(":   ") || trimmed_start.starts_with(":\t") {
+            plain_text = format!("{bullet}{}", trimmed_start[1..].trim_start());
+            col_offset += 1;
+            base_style = Style::default().fg(colors.fg);
+            sel_style = sel_style_plain;
+            icon_span = Some(Span::raw(format!("{indent_prefix}  ")));
+        } else if trimmed_start.starts_with("$$") {
+            plain_text = format!("[ LaTeX Math: {} ]", trimmed_start.trim_matches('$').trim());
+            base_style = Style::default().fg(colors.accent).add_modifier(Modifier::ITALIC);
+            sel_style = sel_style_plain;
             if indent_len > 0 {
                 icon_span = Some(Span::raw(indent_prefix));
             }

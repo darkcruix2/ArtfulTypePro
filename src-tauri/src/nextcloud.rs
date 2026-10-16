@@ -595,12 +595,12 @@ mod tests {
 
         assert_eq!(
             build_webdav_base_url(&config),
-            "https://cloud.example.com/remote.php/dav/files/testuser/"
+            "https://cloud.example.com/remote.php/webdav/"
         );
 
         assert_eq!(
             build_webdav_url(&config, "Documents/Notes.md"),
-            "https://cloud.example.com/remote.php/dav/files/testuser/Documents/Notes.md"
+            "https://cloud.example.com/remote.php/webdav/Documents/Notes.md"
         );
     }
 
