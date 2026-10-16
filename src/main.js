@@ -1101,13 +1101,13 @@ function nodeToMd(node, insideBlock = false) {
         }
         return `[${children(true)}]{${attrs}}`;
       }
-      if (node.classList.contains("math-inline") || node.classList.contains("math")) {
-        const raw = node.dataset.mathRaw || node.textContent.trim();
-        return `$${raw}$`;
-      }
       if (node.classList.contains("math-display")) {
         const raw = node.dataset.mathRaw || node.textContent.trim();
         return `\n\n$$\n${raw}\n$$\n\n`;
+      }
+      if (node.classList.contains("math-inline") || node.classList.contains("math")) {
+        const raw = node.dataset.mathRaw || node.textContent.trim();
+        return `$${raw}$`;
       }
       if (node.classList.contains("critic-sub")) {
         const oldText = node.querySelector(".critic-old")?.textContent || "";

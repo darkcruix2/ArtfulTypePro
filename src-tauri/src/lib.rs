@@ -164,6 +164,102 @@ fn preprocess_fenced_divs(input: &str) -> String {
     out.join("\n")
 }
 
+fn preprocess_critic_markup(input: &str) -> String {
+    if !input.contains("{+") && !input.contains("{-") && !input.contains("{~") && !input.contains("{=") && !input.contains("{>") {
+        return input.to_string();
+    }
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let mut in_code = false;
+
+    while i < len {
+        let rem = &input[i..];
+        if rem.starts_with("```") || rem.starts_with("~~~") {
+            in_code = !in_code;
+            let fence = if rem.starts_with("```") { "```" } else { "~~~" };
+            out.push_str(fence);
+            i += 3;
+            continue;
+        }
+        if in_code {
+            if let Some(ch) = rem.chars().next() {
+                out.push(ch);
+                i += ch.len_utf8();
+            } else {
+                break;
+            }
+            continue;
+        }
+
+        // {++add++}
+        if rem.starts_with("{++") {
+            if let Some(close) = rem[3..].find("++}") {
+                let inner = &rem[3..3 + close];
+                out.push_str(&format!("<ins class=\"critic critic-add\">{}</ins>", escape_html(inner)));
+                i += 3 + close + 3;
+                continue;
+            }
+        }
+
+        // {--del--}
+        if rem.starts_with("{--") {
+            if let Some(close) = rem[3..].find("--}") {
+                let inner = &rem[3..3 + close];
+                out.push_str(&format!("<del class=\"critic critic-del\">{}</del>", escape_html(inner)));
+                i += 3 + close + 3;
+                continue;
+            }
+        }
+
+        // {==highlight==}
+        if rem.starts_with("{==") {
+            if let Some(close) = rem[3..].find("==}") {
+                let inner = &rem[3..3 + close];
+                out.push_str(&format!("<mark class=\"critic critic-highlight\">{}</mark>", escape_html(inner)));
+                i += 3 + close + 3;
+                continue;
+            }
+        }
+
+        // {>>comment<<}
+        if rem.starts_with("{>>") {
+            if let Some(close) = rem[3..].find("<<}") {
+                let inner = &rem[3..3 + close];
+                let esc = escape_html(inner);
+                out.push_str(&format!("<span class=\"critic critic-comment\" data-comment-text=\"{esc}\" title=\"CriticMarkup Comment\"><span class=\"critic-icon\">💬</span> {esc}</span>"));
+                i += 3 + close + 3;
+                continue;
+            }
+        }
+
+        // {~~old~>new~~}
+        if rem.starts_with("{~~") {
+            if let Some(close) = rem[3..].find("~~}") {
+                let inner = &rem[3..3 + close];
+                if let Some(arrow) = inner.find("~>") {
+                    let old_text = &inner[..arrow];
+                    let new_text = &inner[arrow + 2..];
+                    out.push_str(&format!("<span class=\"critic critic-sub\"><del class=\"critic-old\">{}</del><ins class=\"critic-new\">{}</ins></span>", escape_html(old_text), escape_html(new_text)));
+                    i += 3 + close + 3;
+                    continue;
+                }
+            }
+        }
+
+        if let Some(ch) = rem.chars().next() {
+            out.push(ch);
+            i += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    out
+}
+
+
 fn postprocess_pkm(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut i = 0;
@@ -536,10 +632,16 @@ fn parse_markdown(text: &str, compat: Option<MarkdownCompat>) -> String {
         text_after_meta.to_string()
     };
 
-    let preprocessed_text = if compat.pandoc {
+    let text_with_divs = if compat.pandoc {
         preprocess_fenced_divs(&text_with_footnotes)
     } else {
         text_with_footnotes
+    };
+
+    let preprocessed_text = if compat.multimarkdown {
+        preprocess_critic_markup(&text_with_divs)
+    } else {
+        text_with_divs
     };
 
     let mut opts = Options::empty();
