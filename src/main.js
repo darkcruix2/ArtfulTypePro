@@ -609,14 +609,35 @@ async function loadLocalImage(img, src) {
   }
 
   const absPath = resolveToAbsolute(src);
-  if (!absPath) return;
-  try {
-    const dataUrl = await invoke("read_image_base64", { path: absPath });
-    img.setAttribute("src", dataUrl);
-  } catch (err) {
-    console.warn(`Image not found: ${absPath}`, err);
-    img.setAttribute("alt", (img.getAttribute("alt") || "") + " [not found]");
+  if (absPath) {
+    try {
+      const dataUrl = await invoke("read_image_base64", { path: absPath });
+      img.setAttribute("src", dataUrl);
+      return;
+    } catch (err) {
+      console.warn(`Image not found at ${absPath}, trying fallback paths...`);
+    }
   }
+
+  // Fallback checks for relative images (e.g. system-topology.png)
+  const fallbackCandidates = [
+    src,
+    `examples/${src}`,
+    `src/${src}`,
+    `assets/${src}`,
+    `/mnt/volume1/MyCode/workspace/ArtfulTypePro/examples/${src}`,
+    `/mnt/volume1/MyCode/workspace/ArtfulTypePro/src/${src}`
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    try {
+      const dataUrl = await invoke("read_image_base64", { path: candidate });
+      img.setAttribute("src", dataUrl);
+      return;
+    } catch (e) {}
+  }
+
+  img.setAttribute("alt", (img.getAttribute("alt") || "") + " [not found]");
 }
 
 async function fixImageSrcs(el) {
@@ -660,7 +681,7 @@ function getAdmonitionIcon(type) {
 
 function admonitionToMd(node) {
   const type = (node.dataset.admonitionType || "NOTE").toUpperCase();
-  const titleEl = node.querySelector(".admonition-title");
+  const titleEl = node.querySelector(":scope > .admonition-header .admonition-title, :scope > .admonition-title");
   const customTitle = titleEl ? titleEl.textContent.trim() : "";
   const defaultTitle = type.charAt(0) + type.slice(1).toLowerCase();
 
@@ -668,8 +689,17 @@ function admonitionToMd(node) {
     ? ` "${customTitle}"`
     : "";
 
-  const contentEl = node.querySelector(".admonition-content") || node;
-  const inner = nodeToMd(contentEl, true).trim();
+  const contentEl = node.querySelector(":scope > .admonition-content");
+  let inner = "";
+  if (contentEl && contentEl !== node) {
+    inner = Array.from(contentEl.childNodes).map(n => nodeToMd(n, true)).join("").trim();
+  } else {
+    inner = Array.from(node.childNodes)
+      .filter(n => !n.classList?.contains("admonition-header") && !n.classList?.contains("fenced-div-header"))
+      .map(n => nodeToMd(n, true))
+      .join("")
+      .trim();
+  }
 
   if (node.dataset.calloutStyle === "fenced-div") {
     const titleAttr = titleHeader ? ` title=${titleHeader.trim()}` : "";
@@ -841,16 +871,29 @@ function nodeToMd(node, insideBlock = false) {
       codeText = codeText.replace(/^\n+/, "").replace(/\n+$/, "");
       return `\n\n\`\`\`${fenceInfo}\n${codeText}\n\`\`\`\n\n`;
     }
-    // Fix 3: Preserve link title attribute
+    // Fix 3: Preserve link title attribute & Wikilinks
     case "a": {
+      if (node.classList.contains("wikilink") || node.dataset.wikilink) {
+        const target = node.dataset.wikilink || "";
+        const labelEl = node.querySelector(".wikilink-label");
+        const label = labelEl ? labelEl.textContent.trim() : children(true).replace(/^📄\s*/, "").trim();
+        if (label && label !== target) {
+          return `[[${target}|${label}]]`;
+        }
+        return `[[${target}]]`;
+      }
       const href = node.getAttribute("href") || "";
       const title = node.getAttribute("title");
       const label = children(true);
       if (title) return `[${label}](${href} "${title}")`;  
       return `[${label}](${href})`;
     }
-    // Fix 4: Preserve image title attribute
+    // Fix 4: Preserve image title attribute & Transclusion images
     case "img": {
+      if (node.classList.contains("transclusion-image") || node.dataset.originalSrc?.startsWith("![")) {
+        const raw = node.dataset.originalSrc || node.getAttribute("src") || "";
+        return `![[${raw}]]`;
+      }
       const src = node.dataset.originalSrc || node.getAttribute("src") || "";
       const alt = node.getAttribute("alt") || "";
       const title = node.getAttribute("title");
@@ -858,7 +901,9 @@ function nodeToMd(node, insideBlock = false) {
       return `![${alt}](${src})`;
     }
     case "ul": {
-      const items = Array.from(node.children).map((li) => `- ${liToMd(li)}`).join("\n");
+      const items = Array.from(node.children)
+        .filter(c => c.tagName.toLowerCase() === "li")
+        .map((li) => `- ${liToMd(li)}`).join("\n");
       return `${items}\n\n`;
     }
     // Fix 5: Preserve ordered list start attribute
@@ -866,6 +911,7 @@ function nodeToMd(node, insideBlock = false) {
       const startAttr = parseInt(node.getAttribute("start") || "1", 10);
       const start = isNaN(startAttr) ? 1 : startAttr;
       const items = Array.from(node.children)
+        .filter(c => c.tagName.toLowerCase() === "li")
         .map((li, i) => `${start + i}. ${liToMd(li)}`).join("\n");
       return `${items}\n\n`;
     }
@@ -980,9 +1026,50 @@ function nodeToMd(node, insideBlock = false) {
       }
       return `^${children(true)}^`;
     }
+    case "kbd": return `<kbd>${children(true)}</kbd>`;
+    case "details": {
+      const open = node.hasAttribute("open") ? " open" : "";
+      const inner = Array.from(node.childNodes).map(n => nodeToMd(n, true)).join("").trim();
+      return `\n<details${open}>\n${inner}\n</details>\n\n`;
+    }
+    case "summary": {
+      const inner = Array.from(node.childNodes).map(n => nodeToMd(n, true)).join("").trim();
+      return `<summary>${inner}</summary>\n`;
+    }
+    case "u": return `<u>${children(true)}</u>`;
     case "input": return "";
     case "div": case "section": case "article": {
       if (node.classList.contains("footnotes")) return "";
+      if (node.classList.contains("fenced-div") || node.dataset.fencedDiv || node.dataset.calloutStyle === "fenced-div" || node.dataset.fencedClass) {
+        const type = node.dataset.fencedClass || node.dataset.fencedDiv || node.dataset.admonitionType || "note";
+        const contentEl = node.querySelector(":scope > .fenced-div-content, :scope > .admonition-content");
+        let inner = "";
+        if (contentEl && contentEl !== node) {
+          inner = Array.from(contentEl.childNodes).map(n => nodeToMd(n, true)).join("").trim();
+        } else {
+          inner = Array.from(node.childNodes)
+            .filter(n => !n.classList?.contains("fenced-div-header") && !n.classList?.contains("admonition-header"))
+            .map(n => nodeToMd(n, true))
+            .join("")
+            .trim();
+        }
+        return `\n::: ${type.toLowerCase()}\n${inner}\n:::\n\n`;
+      }
+      if (node.classList.contains("transclusion-card")) {
+        const target = node.dataset.transclude || "";
+        return `![[${target}]]\n\n`;
+      }
+      if (node.classList.contains("mdx-component-card")) {
+        const name = node.dataset.componentName || "Card";
+        const props = node.dataset.componentProps || "";
+        const bodyEl = node.querySelector(".mdx-component-body");
+        let body = "";
+        if (bodyEl && bodyEl !== node) {
+          body = Array.from(bodyEl.childNodes).map(n => nodeToMd(n, true)).join("").trim();
+          return `<${name}${props ? ' ' + props : ''}>\n${body}\n</${name}>\n\n`;
+        }
+        return `<${name}${props ? ' ' + props : ''} />\n\n`;
+      }
       if (node.classList.contains("diagram-block")) {
         const src = (node.dataset.diagramSource || "").replace(/^\n+|\s+$/g, "");
         const fenceLang = node.dataset.diagramFence ?? node.dataset.diagramEngine ?? "";
@@ -993,6 +1080,7 @@ function nodeToMd(node, insideBlock = false) {
         const kind = node.dataset.frontmatterKind || "yaml";
         if (kind === "yaml") return `---\n${code.trim()}\n---\n\n`;
         if (kind === "toml") return `+++\n${code.trim()}\n+++\n\n`;
+        if (kind === "json") return `;;;\n${code.trim()}\n;;;\n\n`;
         if (kind === "mmd") return `${code.trim()}\n\n`;
         return `---\n${code.trim()}\n---\n\n`;
       }
@@ -1004,6 +1092,15 @@ function nodeToMd(node, insideBlock = false) {
       return inner.endsWith("\n") ? inner : inner + "\n";
     }
     case "span": {
+      if (node.classList.contains("pandoc-span") || node.dataset.pandocAttrs) {
+        let attrs = node.dataset.pandocAttrs;
+        if (!attrs) {
+          const classes = Array.from(node.classList).filter(c => c !== "pandoc-span").map(c => `.${c}`);
+          const id = node.id ? `#${node.id}` : "";
+          attrs = [id, ...classes].filter(Boolean).join(" ");
+        }
+        return `[${children(true)}]{${attrs}}`;
+      }
       if (node.classList.contains("math-inline") || node.classList.contains("math")) {
         const raw = node.dataset.mathRaw || node.textContent.trim();
         return `$${raw}$`;
@@ -2723,6 +2820,7 @@ function insertAdmonition(type = "note", titleText = "", bodyText = "") {
 
 // ─── View Modes (Writer, Markdown, Split) ───────────────────────────────────
 let currentViewMode = "writer"; // "writer", "markdown", or "split"
+let writerViewIsEdited = false;
 
 async function setViewMode(mode) {
   currentViewMode = mode;
@@ -2742,17 +2840,21 @@ async function setViewMode(mode) {
     editorArea?.classList.add("split-active");
     if (modeIndicatorEl) modeIndicatorEl.textContent = "Split Mode (Antigravity)";
 
-    const content = markdownInputEl.value || htmlToMarkdown(writerViewEl);
+    const content = (writerViewIsEdited ? htmlToMarkdown(writerViewEl) : markdownInputEl.value) || htmlToMarkdown(writerViewEl);
     markdownInputEl.value = content;
     await renderMarkdownToWriter(content);
+    writerViewIsEdited = false;
   } else if (mode === "markdown") {
     isMarkdownMode = true;
     mdBtn?.classList.add("active");
     editorArea?.classList.add("markdown-active");
     if (modeIndicatorEl) modeIndicatorEl.textContent = "Markdown Mode";
 
-    const md = htmlToMarkdown(writerViewEl) || markdownInputEl.value;
-    markdownInputEl.value = md;
+    if (writerViewIsEdited) {
+      const md = htmlToMarkdown(writerViewEl);
+      if (md) markdownInputEl.value = md;
+      writerViewIsEdited = false;
+    }
     markdownInputEl.focus();
   } else {
     currentViewMode = "writer";
@@ -2762,6 +2864,7 @@ async function setViewMode(mode) {
     if (modeIndicatorEl) modeIndicatorEl.textContent = "Writer Mode";
 
     await renderMarkdownToWriter(markdownInputEl.value);
+    writerViewIsEdited = false;
     writerViewEl.focus();
   }
 }
@@ -4478,7 +4581,17 @@ function renderTabBar() {
 
 function syncActiveFileContent() {
   const f = getActiveFile();
-  if (f) f.content = getCurrentMarkdown();
+  if (f) {
+    if (isMarkdownMode || !writerViewIsEdited) {
+      if (markdownInputEl && markdownInputEl.value) {
+        f.content = markdownInputEl.value;
+      } else {
+        f.content = getCurrentMarkdown();
+      }
+    } else {
+      f.content = getCurrentMarkdown();
+    }
+  }
 }
 
 function renderImageViewer(fileObj) {
@@ -4889,18 +5002,18 @@ async function saveNextcloudAs(f, content, silent = false) {
 }
 
 async function saveFile(silent = false) {
-  syncActiveFileContent();
-  let f = getActiveFile();
-  if (!f) {
-    const currentContent = getCurrentMarkdown();
-    const name = "untitled-" + untitledCounter++ + ".md";
-    f = { id: "new-" + Date.now(), path: null, name, content: currentContent, dirty: true };
-    openFiles.push(f);
-    activeFileId = f.id;
-    renderTabBar(); renderFileList();
-  }
-  const content = f.content;
   try {
+    syncActiveFileContent();
+    let f = getActiveFile();
+    if (!f) {
+      const currentContent = getCurrentMarkdown();
+      const name = "untitled-" + untitledCounter++ + ".md";
+      f = { id: "new-" + Date.now(), path: null, name, content: currentContent, dirty: true };
+      openFiles.push(f);
+      activeFileId = f.id;
+      renderTabBar(); renderFileList();
+    }
+    const content = f.content;
     const isNcTabActive = document.getElementById("nextcloud-sidebar-container") && !document.getElementById("nextcloud-sidebar-container").classList.contains("hidden");
     if (f.isNextcloud && f.remotePath) {
       if (!silent) statusMessageEl.textContent = `Saving ${f.remoteName || "file"} to Nextcloud…`;
@@ -4937,24 +5050,25 @@ async function saveFile(silent = false) {
       setDirty(false);
     }
   } catch (e) {
-    console.error(e);
-    if (!silent) statusMessageEl.textContent = "Error saving file";
+    console.error("Save error:", e);
+    if (!silent) statusMessageEl.textContent = `Save error: ${e.message || e}`;
+    alert(`Could not save file: ${e.message || e}`);
   }
 }
 
 async function saveFileAs(silent = false) {
-  syncActiveFileContent();
-  let f = getActiveFile();
-  if (!f) {
-    const currentContent = getCurrentMarkdown();
-    const name = "untitled-" + untitledCounter++ + ".md";
-    f = { id: "new-" + Date.now(), path: null, name, content: currentContent, dirty: true };
-    openFiles.push(f);
-    activeFileId = f.id;
-    renderTabBar(); renderFileList();
-  }
-  const content = f.content;
   try {
+    syncActiveFileContent();
+    let f = getActiveFile();
+    if (!f) {
+      const currentContent = getCurrentMarkdown();
+      const name = "untitled-" + untitledCounter++ + ".md";
+      f = { id: "new-" + Date.now(), path: null, name, content: currentContent, dirty: true };
+      openFiles.push(f);
+      activeFileId = f.id;
+      renderTabBar(); renderFileList();
+    }
+    const content = f.content;
     const isNcTabActive = document.getElementById("nextcloud-sidebar-container") && !document.getElementById("nextcloud-sidebar-container").classList.contains("hidden");
     if (ncConfig && (f.isNextcloud || isNcTabActive)) {
       await saveNextcloudAs(f, content, silent);
@@ -4976,8 +5090,9 @@ async function saveFileAs(silent = false) {
       if (!silent) statusMessageEl.textContent = "Save cancelled.";
     }
   } catch (e) {
-    console.error(e);
-    if (!silent) statusMessageEl.textContent = "Error saving file";
+    console.error("Save As error:", e);
+    if (!silent) statusMessageEl.textContent = `Save error: ${e.message || e}`;
+    alert(`Could not save file: ${e.message || e}`);
   }
 }
 
@@ -5391,8 +5506,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ── Input events ──
-  writerViewEl.addEventListener("input", (e) => { handleLiveMarkdown(e); debouncedStats(); });
-  markdownInputEl.addEventListener("input", debouncedStats);
+  writerViewEl.addEventListener("input", (e) => {
+    writerViewIsEdited = true;
+    handleLiveMarkdown(e);
+    debouncedStats();
+  });
+  markdownInputEl.addEventListener("input", () => {
+    writerViewIsEdited = false;
+    debouncedStats();
+  });
 
   // ── File buttons ──
   document.getElementById("toggle-mode-btn")?.addEventListener("click", toggleMode);
