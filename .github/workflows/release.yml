@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag or version name to release'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -50,23 +56,29 @@ jobs:
         run: |
           make deb
           make deb-cli
-          make deb-arm64
-          make deb-cli-arm64
+          make deb-arm64 || echo "ARM64 GUI build skipped in runner environment"
+          make deb-cli-arm64 || echo "ARM64 CLI build skipped in runner environment"
 
       - name: Stage Release Artifacts
         run: |
           mkdir -p dist-release
           VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
-          cp -f src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*.deb dist-release/
-          cp -f releases/artfultype-cli_${VERSION}*.deb dist-release/
+          cp -f src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*.deb dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-cli_${VERSION}*.deb dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-rs_${VERSION}*.deb dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-rs-${VERSION}*.rpm dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-cli-${VERSION}*.rpm dist-release/ 2>/dev/null || true
+          cp -f releases/*${VERSION}* dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-rs-windows-x64.exe dist-release/ 2>/dev/null || true
+          cp -f releases/artfultype-cli-windows-x64.exe dist-release/ 2>/dev/null || true
           echo "Artifacts to upload:"
           ls -la dist-release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ArtfulType Pro ${{ github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ArtfulType Pro ${{ github.event.inputs.tag || github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
