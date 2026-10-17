@@ -1,5 +1,6 @@
 pub mod nextcloud;
 pub mod diagrams;
+pub mod updater;
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 
 use pulldown_cmark::{html, CodeBlockKind, Event, MetadataBlockKind, Options, Parser, Tag, TagEnd};
@@ -1423,7 +1424,7 @@ pub fn run() {
         let args: Vec<String> = std::env::args().collect();
         for arg in &args[1..] {
             if arg == "-h" || arg == "--help" {
-                println!("ArtfulType Pro v0.30.3");
+                println!("ArtfulType Pro v{}", env!("CARGO_PKG_VERSION"));
                 println!("Usage: artfultype-rs [OPTIONS] [FILE]\n");
                 println!("Options:");
                 println!("  --mode <MODE>      Set initial view mode (writer | markdown | split)");
@@ -1432,7 +1433,7 @@ pub fn run() {
                 println!("  -v, --version      Print version information");
                 return;
             } else if arg == "-v" || arg == "--version" {
-                println!("ArtfulType Pro v0.30.3");
+                println!("ArtfulType Pro v{}", env!("CARGO_PKG_VERSION"));
                 return;
             }
         }
@@ -1469,6 +1470,9 @@ pub fn run() {
             diagrams::render_d2,
             diagrams::render_svgbob,
             diagrams::diagram_capabilities,
+            updater::check_for_updates,
+            updater::download_and_install_update,
+            updater::restart_app,
         ]);
 
     // ── Desktop-only plugins & commands ──────────────────────────────────────

@@ -53,6 +53,32 @@ echo "Copying $LATEST_CLI_ARM64 -> $PUPPET_FILES/artfultype-cli_arm64.deb"
 cp -f "$LATEST_CLI_ARM64" "$PUPPET_FILES/artfultype-cli_arm64.deb"
 
 echo "=============================================="
+echo " Publishing Release to GitHub..."
+echo "=============================================="
+cd "$SCRIPT_DIR"
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  echo "Uploading packages to GitHub release v${VERSION}..."
+  if gh release view "v${VERSION}" >/dev/null 2>&1; then
+    gh release upload "v${VERSION}" \
+      "$LATEST_GUI_AMD64" \
+      "$LATEST_GUI_ARM64" \
+      "$LATEST_CLI_AMD64" \
+      "$LATEST_CLI_ARM64" --clobber
+  else
+    gh release create "v${VERSION}" \
+      "$LATEST_GUI_AMD64" \
+      "$LATEST_GUI_ARM64" \
+      "$LATEST_CLI_AMD64" \
+      "$LATEST_CLI_ARM64" \
+      --title "ArtfulType Pro v${VERSION}" \
+      --generate-notes
+  fi
+  echo "✓ GitHub Release v${VERSION} published successfully!"
+else
+  echo "Notice: gh CLI not authenticated or not found, skipping GitHub Release."
+fi
+
+echo "=============================================="
 echo " Committing and Deploying via Puppet..."
 echo "=============================================="
 
@@ -74,3 +100,4 @@ if command -v puppet >/dev/null 2>&1; then
 fi
 
 echo "All steps finished successfully!"
+

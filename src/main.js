@@ -5999,6 +5999,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     mainMenuBtn.addEventListener("click", toggleMainMenu);
   }
   document.getElementById("menu-about-btn")?.addEventListener("click", () => openModal("about-modal"));
+  document.getElementById("menu-check-updates-btn")?.addEventListener("click", () => {
+    toggleMainMenu();
+    checkForUpdates(false);
+  });
   document.getElementById("menu-prefs-btn")?.addEventListener("click", () => openModal("prefs-modal"));
 
   document.getElementById("close-about-btn")?.addEventListener("click", () => closeModal("about-modal"));
@@ -6114,7 +6118,26 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // TUI Help Items
+  document.getElementById("tui-help-check-updates")?.addEventListener("click", () => {
+    closeAllTuiMenus();
+    checkForUpdates(false);
+  });
   document.getElementById("tui-help-about")?.addEventListener("click", () => { closeAllTuiMenus(); openModal("about-modal"); });
+  document.getElementById("about-check-updates-btn")?.addEventListener("click", () => {
+    closeModal("about-modal");
+    checkForUpdates(false);
+  });
+
+  // Update Modal and Badge
+  document.getElementById("update-badge-btn")?.addEventListener("click", () => {
+    if (currentUpdateInfo) showUpdateModal(currentUpdateInfo);
+    else checkForUpdates(false);
+  });
+  document.getElementById("update-modal-close-btn")?.addEventListener("click", () => closeModal("update-modal"));
+  document.getElementById("update-modal-action-btn")?.addEventListener("click", onUpdateActionClick);
+
+  // Background check for updates shortly after startup
+  setTimeout(() => { checkForUpdates(true); }, 4000);
 
   // Close TUI menus on clicking anywhere outside
   document.addEventListener("click", (e) => {
@@ -7627,3 +7650,149 @@ window.addEventListener("focus", () => {
     handleAppForeground();
   }
 });
+
+// ─── Application Updater ──────────────────────────────────────────────────────
+let currentUpdateInfo = null;
+let updateProgressUnlisten = null;
+let updateState = "idle"; // "idle" | "downloading" | "installed"
+
+async function checkForUpdates(silent = false) {
+  if (!window.__TAURI__) return;
+  if (!silent) {
+    setStatus("Checking for updates…", 3000);
+  }
+  try {
+    const info = await invoke("check_for_updates");
+    currentUpdateInfo = info;
+    if (info && info.update_available) {
+      const badge = document.getElementById("update-badge-btn");
+      if (badge) {
+        const text = document.getElementById("update-badge-text");
+        if (text) text.textContent = `v${info.latest_version} available`;
+        badge.classList.remove("hidden");
+        badge.style.display = "inline-flex";
+      }
+      if (!silent) {
+        showUpdateModal(info);
+      }
+    } else {
+      if (!silent) {
+        setStatus(`ArtfulType Pro is up to date (v${info.current_version})`, 4000);
+      }
+    }
+  } catch (err) {
+    console.error("Update check failed:", err);
+    if (!silent) {
+      setStatus(`Update check failed: ${err}`, 5000);
+    }
+  }
+}
+
+function showUpdateModal(info) {
+  const badge = document.getElementById("update-modal-badge");
+  if (badge) badge.textContent = `v${info.latest_version}`;
+
+  const summary = document.getElementById("update-modal-summary");
+  if (summary) summary.textContent = info.release_name || `ArtfulType Pro v${info.latest_version}`;
+
+  const publishedEl = document.getElementById("update-modal-published");
+  if (publishedEl) {
+    if (info.published_at) {
+      try {
+        const d = new Date(info.published_at);
+        publishedEl.textContent = `Released on ${d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+      } catch (_) {
+        publishedEl.textContent = "";
+      }
+    } else {
+      publishedEl.textContent = "";
+    }
+  }
+
+  const notesEl = document.getElementById("update-modal-notes");
+  if (notesEl) {
+    notesEl.textContent = info.release_notes || "No release notes provided.";
+  }
+
+  const progressCont = document.getElementById("update-progress-container");
+  if (progressCont) progressCont.style.display = "none";
+
+  const actionBtn = document.getElementById("update-modal-action-btn");
+  if (actionBtn) {
+    actionBtn.textContent = "Upgrade Now";
+    actionBtn.disabled = false;
+  }
+  updateState = "idle";
+
+  openModal("update-modal");
+}
+
+async function onUpdateActionClick() {
+  if (updateState === "installed") {
+    try {
+      await invoke("restart_app");
+    } catch (err) {
+      console.error("Restart failed:", err);
+      setStatus("Please restart ArtfulType Pro manually.", 5000);
+    }
+    return;
+  }
+
+  if (!currentUpdateInfo || !currentUpdateInfo.download_url) {
+    setStatus("No package available for your architecture in this release.", 4000);
+    return;
+  }
+
+  const actionBtn = document.getElementById("update-modal-action-btn");
+  const progressCont = document.getElementById("update-progress-container");
+  const fillEl = document.getElementById("update-progress-bar-fill");
+  const statusEl = document.getElementById("update-progress-status");
+
+  if (actionBtn) {
+    actionBtn.textContent = "Downloading…";
+    actionBtn.disabled = true;
+  }
+  if (progressCont) progressCont.style.display = "flex";
+  if (fillEl) fillEl.style.width = "0%";
+  if (statusEl) statusEl.textContent = "Starting download…";
+
+  // Setup progress listener
+  if (window.__TAURI__?.event?.listen && !updateProgressUnlisten) {
+    try {
+      updateProgressUnlisten = await window.__TAURI__.event.listen("update-progress", (event) => {
+        const p = event.payload;
+        if (!p) return;
+        if (fillEl) fillEl.style.width = `${p.percent}%`;
+        if (statusEl) statusEl.textContent = p.message || `${p.percent}%`;
+      });
+    } catch (e) {
+      console.warn("Could not attach update-progress listener:", e);
+    }
+  }
+
+  updateState = "downloading";
+
+  try {
+    const res = await invoke("download_and_install_update", {
+      downloadUrl: currentUpdateInfo.download_url,
+      assetName: currentUpdateInfo.asset_name || "artfultype-update.deb"
+    });
+
+    updateState = "installed";
+    if (fillEl) fillEl.style.width = "100%";
+    if (statusEl) statusEl.textContent = "Installation complete! Restart to apply.";
+
+    if (actionBtn) {
+      actionBtn.textContent = "Restart Application";
+      actionBtn.disabled = false;
+    }
+  } catch (err) {
+    updateState = "idle";
+    if (statusEl) statusEl.textContent = `Error: ${err}`;
+    if (actionBtn) {
+      actionBtn.textContent = "Retry";
+      actionBtn.disabled = false;
+    }
+  }
+}
+

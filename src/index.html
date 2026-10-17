@@ -57,6 +57,10 @@
           <span class="app-title">ArtfulType Pro <span class="app-version">v0.30.13</span></span>
         </div>
         <div class="header-right" style="display: flex; align-items: center; gap: 8px;">
+          <button id="update-badge-btn" class="update-badge-btn hidden" title="New version available">
+            <span class="update-pulse"></span>
+            <span id="update-badge-text">Update</span>
+          </button>
           <button id="global-save-btn" class="icon-btn" title="Save File (Ctrl+S)">
             <svg id="global-save-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           </button>
@@ -509,12 +513,14 @@
     </div>
 
     <div id="tui-help-menu" class="dropdown-menu tui-dropdown hidden">
+      <button id="tui-help-check-updates" class="menu-item"><span>🔄 Check for Updates…</span></button>
       <button id="tui-help-about" class="menu-item"><span>ℹ️ About ArtfulType Pro</span></button>
     </div>
 
     <!-- Main Dropdown Menu -->
     <div id="main-menu" class="dropdown-menu hidden">
       <button id="menu-compat-btn" class="menu-item"><span>⚙️ Markdown Compatibility…</span></button>
+      <button id="menu-check-updates-btn" class="menu-item">Check for Updates…</button>
       <button id="menu-about-btn" class="menu-item">About</button>
       <button id="menu-prefs-btn" class="menu-item">Preferences</button>
     </div>
@@ -587,7 +593,8 @@
         <p><strong>License:</strong> GPLv3</p>
         <p><strong>Maintainer:</strong> Roland Huber</p>
         <p><strong>Original Creator:</strong> Sean Malseed (Action Retro)</p>
-        <div class="modal-actions">
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+          <button id="about-check-updates-btn" class="btn" style="background: rgba(255,255,255,0.08);">Check for Updates</button>
           <button id="close-about-btn" class="btn primary-btn">Close</button>
         </div>
       </div>
@@ -701,6 +708,35 @@
         <div class="modal-actions" style="gap: 8px;">
           <button id="confirm-modal-cancel-btn" class="btn">Cancel</button>
           <button id="confirm-modal-ok-btn" class="btn danger-btn">Confirm</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Update Modal -->
+    <dialog id="update-modal" class="modal-dialog glass-panel">
+      <div class="modal-content update-modal-content">
+        <div class="update-modal-header">
+          <h2>🚀 Software Update</h2>
+          <span id="update-modal-badge" class="badge">v0.0.0</span>
+        </div>
+        <hr class="modal-sep" />
+        <div id="update-modal-info" class="update-modal-info">
+          <p id="update-modal-summary" class="update-modal-summary" style="font-weight: 500; font-size: 0.95rem;"></p>
+          <p id="update-modal-published" style="font-size: 0.8rem; color: var(--comment, #6272a4); margin: -4px 0 6px 0;"></p>
+          <div class="update-notes-container">
+            <h4 style="font-size: 0.85rem; margin-bottom: 4px;">Release Notes:</h4>
+            <div id="update-modal-notes" class="update-notes-box"></div>
+          </div>
+        </div>
+        <div id="update-progress-container" class="update-progress-container" style="display: none;">
+          <div class="update-progress-bar-bg">
+            <div id="update-progress-bar-fill" class="update-progress-bar-fill" style="width: 0%;"></div>
+          </div>
+          <p id="update-progress-status" class="update-progress-status">Downloading: 0%</p>
+        </div>
+        <div class="modal-actions" style="margin-top: 14px; gap: 8px;">
+          <button id="update-modal-close-btn" class="btn">Later</button>
+          <button id="update-modal-action-btn" class="btn primary-btn">Upgrade Now</button>
         </div>
       </div>
     </dialog>

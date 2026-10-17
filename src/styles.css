@@ -4134,5 +4134,118 @@ mark.pkm-highlight {
   padding: 12px 14px;
 }
 
+/* ── Software Update Badge & Modal Styles ───────────────────────────────── */
+.update-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(80, 250, 123, 0.15);
+  border: 1px solid rgba(80, 250, 123, 0.4);
+  color: #50fa7b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
 
+.update-badge-btn:hover {
+  background: rgba(80, 250, 123, 0.25);
+  border-color: #50fa7b;
+  box-shadow: 0 0 10px rgba(80, 250, 123, 0.3);
+  transform: translateY(-1px);
+}
 
+.update-badge-btn.hidden {
+  display: none !important;
+}
+
+.update-pulse {
+  width: 7px;
+  height: 7px;
+  background: #50fa7b;
+  border-radius: 50%;
+  animation: pulse-update-dot 2s infinite;
+}
+
+@keyframes pulse-update-dot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(80, 250, 123, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(80, 250, 123, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(80, 250, 123, 0);
+  }
+}
+
+#update-modal {
+  max-width: 520px;
+}
+
+.update-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.update-modal-header .badge {
+  background: rgba(189, 147, 249, 0.2);
+  border: 1px solid var(--purple);
+  color: var(--purple);
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.update-notes-container {
+  margin-top: 8px;
+}
+
+.update-notes-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--fg, #f8f8f2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.update-progress-container {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.update-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #bd93f9, #50fa7b);
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.update-progress-status {
+  font-size: 0.8rem;
+  color: var(--fg);
+  text-align: right;
+  margin: 0;
+}
