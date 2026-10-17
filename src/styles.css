@@ -160,6 +160,179 @@
   --active-file-fg: #1e2b37;
 }
 
+/* ── Standard Daylight (Subtle Office/macOS Light Theme) ───────────────────── */
+[data-theme="standard-daylight"] {
+  color-scheme: light;
+
+  --bg:           #ffffff;
+  --bg-sidebar:   #f3f4f6;
+  --bg-header:    rgba(243, 244, 246, 0.96);
+  --bg-elevated:  #ffffff;
+  --bg-editor:    #ffffff;
+  --selection:    #c8daf8;
+  --fg:           #24292f;
+  --comment:      #656d76;
+  --cyan:         #0969da;
+  --green:        #1a7f37;
+  --orange:       #9a6700;
+  --pink:         #6e7781;
+  --purple:       #0550ae;
+  --red:          #cf222e;
+  --yellow:       #8c6b00;
+  --border:       #e1e4e8;
+  --glass-bg:     rgba(243, 244, 246, 0.92);
+
+  --accent:       #0969da;
+  --accent-hover: #0854c3;
+  --text-main:    #24292f;
+  --text-muted:   #656d76;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+
+  --active-file-bg: rgba(9, 105, 218, 0.1);
+  --active-file-fg: #0969da;
+}
+
+/* ── Standard Night (Subtle Office/macOS Dark Theme) ──────────────────────── */
+[data-theme="standard-night"] {
+  color-scheme: dark;
+
+  --bg:           #202124;
+  --bg-sidebar:   #1b1c1e;
+  --bg-header:    rgba(27, 28, 30, 0.96);
+  --bg-elevated:  #2b2c30;
+  --bg-editor:    #242528;
+  --selection:    #264f78;
+  --fg:           #e1e4e8;
+  --comment:      #8b949e;
+  --cyan:         #79c0ff;
+  --green:        #7ee787;
+  --orange:       #d29922;
+  --pink:         #b392f0;
+  --purple:       #79c0ff;
+  --red:          #f85149;
+  --yellow:       #d29922;
+  --border:       #383a3e;
+  --glass-bg:     rgba(32, 33, 36, 0.92);
+
+  --accent:       #58a6ff;
+  --accent-hover: #79b8ff;
+  --text-main:    #e1e4e8;
+  --text-muted:   #8b949e;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+
+  --active-file-bg: rgba(88, 166, 255, 0.15);
+  --active-file-fg: #58a6ff;
+}
+
+/* ── Standard Daylight & Night Subtle Typography Overrides ────────────────── */
+[data-theme="standard-daylight"] #writer-view h1 {
+  color: #1f2328;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+[data-theme="standard-daylight"] #writer-view h2 {
+  color: #24292f;
+  border-bottom: 1px solid #eaecef;
+}
+
+[data-theme="standard-daylight"] #writer-view h3,
+[data-theme="standard-daylight"] #writer-view h4,
+[data-theme="standard-daylight"] #writer-view h5,
+[data-theme="standard-daylight"] #writer-view h6 {
+  color: #24292f;
+}
+
+[data-theme="standard-daylight"] #writer-view a {
+  color: #0969da;
+  border-bottom: 1px solid rgba(9, 105, 218, 0.35);
+}
+
+[data-theme="standard-daylight"] #writer-view blockquote {
+  border-left: 3px solid #d0d7de;
+  background: #f6f8fa;
+  color: #57606a;
+}
+
+[data-theme="standard-daylight"] #writer-view code {
+  background: #f3f4f6;
+  color: #24292f;
+  border: 1px solid #e1e4e8;
+}
+
+[data-theme="standard-daylight"] #writer-view pre {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-left: 3px solid #0969da;
+}
+
+[data-theme="standard-night"] #writer-view h1 {
+  color: #8ab4f8;
+  border-bottom: 1px solid #383a3e;
+}
+
+[data-theme="standard-night"] #writer-view h2 {
+  color: #e1e4e8;
+  border-bottom: 1px solid #383a3e;
+}
+
+[data-theme="standard-night"] #writer-view h3,
+[data-theme="standard-night"] #writer-view h4,
+[data-theme="standard-night"] #writer-view h5,
+[data-theme="standard-night"] #writer-view h6 {
+  color: #e1e4e8;
+}
+
+[data-theme="standard-night"] #writer-view a {
+  color: #58a6ff;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.35);
+}
+
+[data-theme="standard-night"] #writer-view blockquote {
+  border-left: 3px solid #484f58;
+  background: rgba(255, 255, 255, 0.03);
+  color: #8b949e;
+}
+
+[data-theme="standard-night"] #writer-view code {
+  background: #2b2c30;
+  color: #e1e4e8;
+  border: 1px solid #383a3e;
+}
+
+[data-theme="standard-night"] #writer-view pre {
+  background: #1e1f22;
+  border: 1px solid #383a3e;
+  border-left: 3px solid #58a6ff;
+}
+
+/* Subtle Syntax Token Overrides (No distracting rainbow colors) */
+[data-theme="standard-daylight"] .syn-keyword  { color: #0550ae; font-weight: 600; }
+[data-theme="standard-daylight"] .syn-string   { color: #116329; }
+[data-theme="standard-daylight"] .syn-comment  { color: #6e7781; font-style: italic; }
+[data-theme="standard-daylight"] .syn-function { color: #0969da; font-weight: 500; }
+[data-theme="standard-daylight"] .syn-number   { color: #0550ae; }
+[data-theme="standard-daylight"] .syn-variable { color: #24292f; }
+[data-theme="standard-daylight"] .syn-operator { color: #57606a; }
+[data-theme="standard-daylight"] .syn-type     { color: #0550ae; font-style: italic; }
+[data-theme="standard-daylight"] .syn-tag      { color: #116329; font-weight: 500; }
+[data-theme="standard-daylight"] .syn-attr     { color: #0550ae; }
+
+[data-theme="standard-night"] .syn-keyword  { color: #79c0ff; font-weight: 600; }
+[data-theme="standard-night"] .syn-string   { color: #7ee787; }
+[data-theme="standard-night"] .syn-comment  { color: #8b949e; font-style: italic; }
+[data-theme="standard-night"] .syn-function { color: #d2a8ff; font-weight: 500; }
+[data-theme="standard-night"] .syn-number   { color: #79c0ff; }
+[data-theme="standard-night"] .syn-variable { color: #e1e4e8; }
+[data-theme="standard-night"] .syn-operator { color: #c9d1d9; }
+[data-theme="standard-night"] .syn-type     { color: #79c0ff; font-style: italic; }
+[data-theme="standard-night"] .syn-tag      { color: #7ee787; font-weight: 500; }
+[data-theme="standard-night"] .syn-attr     { color: #79c0ff; }
+
+
 
 /* ── BeOS Theme ─────────────────────────────────────────────────────────────── */
 [data-theme="beos"] {
@@ -1049,6 +1222,16 @@ sup {
   color: #1e293b;
 }
 
+[data-theme="standard-daylight"] mark {
+  background-color: #fef08a;
+  color: #1f2328;
+}
+
+[data-theme="standard-night"] mark {
+  background-color: rgba(227, 179, 65, 0.35);
+  color: #fef08a;
+}
+
 /* Code blocks */
 #writer-view pre {
   background: var(--bg-sidebar);
@@ -1632,6 +1815,22 @@ dialog:not([open]),
   color: #1e2b37 !important;
 }
 
+[data-theme="standard-daylight"] ::selection,
+[data-theme="standard-daylight"] *::selection,
+[data-theme="standard-daylight"] ::-moz-selection,
+[data-theme="standard-daylight"] *::-moz-selection {
+  background: #c8daf8 !important;
+  color: #1f2328 !important;
+}
+
+[data-theme="standard-night"] ::selection,
+[data-theme="standard-night"] *::selection,
+[data-theme="standard-night"] ::-moz-selection,
+[data-theme="standard-night"] *::-moz-selection {
+  background: #264f78 !important;
+  color: #ffffff !important;
+}
+
 /* ── Base Select Styling ───────────────────────────────────────────────────── */
 .pref-select {
   appearance: none;
@@ -1712,6 +1911,64 @@ dialog:not([open]),
 [data-theme="calm-rs"] .menu-item:hover {
   background-color: #b9cbd9 !important;
   color: #1e2b37 !important;
+}
+
+/* ── Standard Daylight Overrides ─────────────────────────────────────────── */
+[data-theme="standard-daylight"] .pref-select {
+  background-color: #ffffff !important;
+  color: #24292f !important;
+  border: 1px solid #d0d7de !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230969da' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+[data-theme="standard-daylight"] .pref-select option {
+  background-color: #ffffff !important;
+  color: #24292f !important;
+}
+
+[data-theme="standard-daylight"] .dropdown-menu {
+  background-color: #ffffff !important;
+  border: 1px solid #d0d7de !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="standard-daylight"] .menu-item {
+  color: #24292f !important;
+  background-color: transparent !important;
+}
+
+[data-theme="standard-daylight"] .menu-item:hover {
+  background-color: #f3f4f6 !important;
+  color: #0969da !important;
+}
+
+/* ── Standard Night Overrides ───────────────────────────────────────────── */
+[data-theme="standard-night"] .pref-select {
+  background-color: #2b2c30 !important;
+  color: #e1e4e8 !important;
+  border: 1px solid #383a3e !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+[data-theme="standard-night"] .pref-select option {
+  background-color: #242528 !important;
+  color: #e1e4e8 !important;
+}
+
+[data-theme="standard-night"] .dropdown-menu {
+  background-color: #242528 !important;
+  border: 1px solid #383a3e !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="standard-night"] .menu-item {
+  color: #e1e4e8 !important;
+  background-color: transparent !important;
+}
+
+[data-theme="standard-night"] .menu-item:hover {
+  background-color: #2f3136 !important;
+  color: #58a6ff !important;
 }
 
 /* ── Classic Mac Specific Visuals (All Accents Black) ───────────────────────── */

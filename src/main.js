@@ -323,12 +323,21 @@ function updateAutoSaveUI(intervalMinutes) {
 }
 
 // ─── Theme Management ─────────────────────────────────────────────────────────
-const VALID_THEMES = new Set(["dracula", "classic-mac", "win98", "solaris-cde", "beos", "calm-rs"]);
+const VALID_THEMES = new Set(["dracula", "standard-daylight", "standard-night", "calm-rs", "classic-mac", "win98", "solaris-cde", "beos"]);
 
 function applyThemeSetting(themeName) {
   const validTheme = VALID_THEMES.has(themeName) ? themeName : "dracula";
   saveSettings({ theme: validTheme });
   document.documentElement.setAttribute("data-theme", validTheme);
+
+  if (validTheme === "standard-daylight") {
+    document.documentElement.style.colorScheme = "light";
+  } else if (validTheme === "standard-night") {
+    document.documentElement.style.colorScheme = "dark";
+  } else {
+    document.documentElement.style.removeProperty("color-scheme");
+  }
+
   updateThemeUI(validTheme);
 }
 

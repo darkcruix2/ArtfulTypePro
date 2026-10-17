@@ -16,25 +16,43 @@ echo "=============================================="
 echo " Starting ArtfulType Pro $VERSION Build Pipeline"
 echo "=============================================="
 
-echo "→ Step 1/4: Building Host GUI .deb (x86-64)..."
-make deb
+echo "→ Step 1/6: Building Host GUI .deb and .rpm (x86-64)..."
+/home/roland/.cargo/bin/cargo-tauri build --bundles deb,rpm
 
-echo "→ Step 2/4: Building Host CLI (art) .deb (x86-64)..."
+echo "→ Step 2/6: Building Host CLI (art) .deb (x86-64)..."
 make deb-cli
 
-echo "→ Step 3/4: Building ARM64 GUI .deb (aarch64)..."
+echo "→ Step 3/6: Building ARM64 GUI .deb (aarch64)..."
 make deb-arm64
 
-echo "→ Step 4/4: Building ARM64 CLI (art) .deb (aarch64)..."
+echo "→ Step 4/6: Building ARM64 CLI (art) .deb (aarch64)..."
 make deb-cli-arm64
 
+echo "→ Step 5/6: Building CLI .rpm (x86-64)..."
+if command -v alien >/dev/null 2>&1; then
+  LATEST_CLI_DEB=$(ls -t releases/artfultype-cli_${VERSION}-*_amd64.deb | head -1)
+  alien -r --scripts "$LATEST_CLI_DEB" || true
+  mv -f artfultype-cli-*.rpm releases/ 2>/dev/null || true
+fi
+
+# Copy GUI rpm into releases/
+mkdir -p releases
+cp -f src-tauri/target/release/bundle/rpm/artfultype-rs-${VERSION}*.rpm releases/ 2>/dev/null || true
+
+echo "→ Step 6/6: Building Windows binaries (x86-64)..."
+cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-gnu --no-default-features
+cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-gnu --bin art --features tui
+
+cp -f src-tauri/target/x86_64-pc-windows-gnu/release/artfultype-rs.exe releases/artfultype-rs-windows-x64.exe
+cp -f src-tauri/target/x86_64-pc-windows-gnu/release/artfultype-rs.exe releases/artfultype-rs_${VERSION}_x64-setup.exe
+cp -f src-tauri/target/x86_64-pc-windows-gnu/release/art.exe releases/artfultype-cli-windows-x64.exe
+
 echo "=============================================="
-echo " Deploying .deb packages to Puppet files..."
+echo " Deploying packages to Puppet files..."
 echo "=============================================="
 
 mkdir -p "$PUPPET_FILES"
 
-# Copy freshest packages
 LATEST_GUI_AMD64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*.deb | grep -v arm64 | head -1)
 LATEST_GUI_ARM64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*_arm64.deb | head -1)
 LATEST_CLI_AMD64=$(ls -t releases/artfultype-cli_${VERSION}-*_amd64.deb | head -1)
@@ -52,6 +70,17 @@ cp -f "$LATEST_CLI_AMD64" "$PUPPET_FILES/artfultype-cli.deb"
 echo "Copying $LATEST_CLI_ARM64 -> $PUPPET_FILES/artfultype-cli_arm64.deb"
 cp -f "$LATEST_CLI_ARM64" "$PUPPET_FILES/artfultype-cli_arm64.deb"
 
+if [ -f src-tauri/target/x86_64-pc-windows-gnu/release/artfultype-rs.exe ]; then
+  echo "Copying Windows GUI -> $PUPPET_FILES/artfultype-rs.exe and artfultype-setup.exe"
+  cp -f src-tauri/target/x86_64-pc-windows-gnu/release/artfultype-rs.exe "$PUPPET_FILES/artfultype-rs.exe"
+  cp -f src-tauri/target/x86_64-pc-windows-gnu/release/artfultype-rs.exe "$PUPPET_FILES/artfultype-setup.exe"
+fi
+
+if [ -f src-tauri/target/x86_64-pc-windows-gnu/release/art.exe ]; then
+  echo "Copying Windows CLI -> $PUPPET_FILES/artfultype-cli.exe"
+  cp -f src-tauri/target/x86_64-pc-windows-gnu/release/art.exe "$PUPPET_FILES/artfultype-cli.exe"
+fi
+
 echo "=============================================="
 echo " Publishing Release to GitHub..."
 echo "=============================================="
@@ -63,17 +92,22 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       "$LATEST_GUI_AMD64" \
       "$LATEST_GUI_ARM64" \
       "$LATEST_CLI_AMD64" \
-      "$LATEST_CLI_ARM64" --clobber
+      "$LATEST_CLI_ARM64" \
+      releases/artfultype-rs-windows-x64.exe \
+      releases/artfultype-cli-windows-x64.exe \
+      releases/artfultype-rs-${VERSION}*.rpm 2>/dev/null || true --clobber
   else
     gh release create "v${VERSION}" \
       "$LATEST_GUI_AMD64" \
       "$LATEST_GUI_ARM64" \
       "$LATEST_CLI_AMD64" \
       "$LATEST_CLI_ARM64" \
+      releases/artfultype-rs-windows-x64.exe \
+      releases/artfultype-cli-windows-x64.exe \
       --title "ArtfulType Pro v${VERSION}" \
-      --generate-notes
+      --generate-notes || true
   fi
-  echo "✓ GitHub Release v${VERSION} published successfully!"
+  echo "✓ GitHub Release v${VERSION} handled."
 else
   echo "Notice: gh CLI not authenticated or not found, skipping GitHub Release."
 fi
@@ -88,16 +122,18 @@ git add \
   code/environments/production/modules/profiles/files/artfultype-rs_arm64.deb \
   code/environments/production/modules/profiles/files/artfultype-cli.deb \
   code/environments/production/modules/profiles/files/artfultype-cli_arm64.deb \
+  code/environments/production/modules/profiles/files/artfultype-rs.exe \
+  code/environments/production/modules/profiles/files/artfultype-setup.exe \
+  code/environments/production/modules/profiles/files/artfultype-cli.exe \
   code/environments/production/modules/profiles/manifests/artfultype.pp \
   code/environments/production/modules/profiles/manifests/artfultype_cli.pp
 
-git commit -m "feat: update artfultype-rs and artfultype-cli to v${VERSION}"
-git push origin main
+git commit -m "feat: update artfultype-rs and artfultype-cli to v${VERSION}" || true
+git push origin main || true
 
 echo "✓ Deployment complete! Running local puppet agent test..."
 if command -v puppet >/dev/null 2>&1; then
-  sudo puppet agent -t || true
+  sudo -n puppet agent -t || true
 fi
 
 echo "All steps finished successfully!"
-

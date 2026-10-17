@@ -46,7 +46,7 @@ CP          := cp -r
 
 # ─────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := build
-.PHONY: all build deb deb-arm64 deb-cli deb-cli-arm64 install uninstall clean deps deps-arm64 check \
+.PHONY: all build deb deb-arm64 deb-cli deb-cli-arm64 rpm windows install uninstall clean deps deps-arm64 check \
         android-setup android-dev android-build android-check
 
 # ─── Build release binary ─────────────────────────────────────────────────────
@@ -63,6 +63,26 @@ deb:
 	$(CARGO_TAURI) build --bundles deb
 	@echo "✓ Package(s):"
 	@ls -1 $(DEB_DIR)/*.deb 2>/dev/null || echo "  (no .deb found — check build output above)"
+
+# ─── Build .rpm package (host arch — x86-64) ─────────────────────────────────
+rpm:
+	@echo "→ Building $(APP_NAME) .rpm package…"
+	$(CARGO_TAURI) build --bundles rpm
+	@mkdir -p releases
+	@cp -f $(RELEASE_DIR)/bundle/rpm/$(APP_NAME)-$(APP_VERSION)*.rpm releases/ 2>/dev/null || true
+	@echo "✓ RPM Package(s):"
+	@ls -1 releases/$(APP_NAME)-$(APP_VERSION)*.rpm 2>/dev/null || echo "  (no .rpm found)"
+
+# ─── Build Windows binaries (cross-compiled via mingw) ────────────────────────
+windows:
+	@echo "→ Cross-compiling Windows x64 binaries…"
+	cargo build --manifest-path $(TAURI_SRC)/Cargo.toml --release --target x86_64-pc-windows-gnu --no-default-features
+	cargo build --manifest-path $(TAURI_SRC)/Cargo.toml --release --target x86_64-pc-windows-gnu --bin art --features tui
+	@mkdir -p releases
+	cp -f $(TAURI_SRC)/target/x86_64-pc-windows-gnu/release/$(APP_NAME).exe releases/$(APP_NAME)-windows-x64.exe
+	cp -f $(TAURI_SRC)/target/x86_64-pc-windows-gnu/release/$(APP_NAME).exe releases/$(APP_NAME)_$(APP_VERSION)_x64-setup.exe
+	cp -f $(TAURI_SRC)/target/x86_64-pc-windows-gnu/release/art.exe releases/artfultype-cli-windows-x64.exe
+	@echo "✓ Windows binaries in releases/"
 
 # ─── Build .deb package for ARM64 (aarch64 — CM4 / uConsole / RPi) ───────────
 #

@@ -1428,7 +1428,7 @@ pub fn run() {
                 println!("Usage: artfultype-rs [OPTIONS] [FILE]\n");
                 println!("Options:");
                 println!("  --mode <MODE>      Set initial view mode (writer | markdown | split)");
-                println!("  --theme <THEME>    Set initial theme (dark-antigravity | retro-green | retro-amber | dracula)");
+                println!("  --theme <THEME>    Set initial theme (standard-daylight | standard-night | dracula | calm-rs | classic-mac | win98 | solaris-cde | beos)");
                 println!("  -h, --help         Print help information");
                 println!("  -v, --version      Print version information");
                 return;

@@ -83,6 +83,8 @@ enum Theme {
     Dracula,
     DosEdit,
     VT100,
+    StandardDaylight,
+    StandardNight,
 }
 
 impl Theme {
@@ -153,6 +155,28 @@ impl Theme {
                 quote: Color::Yellow,
                 sel_bg: Color::Blue,
                 sel_fg: Color::White,
+            },
+            Theme::StandardDaylight => ThemeColors {
+                bg: Color::Rgb(255, 255, 255),
+                fg: Color::Rgb(36, 41, 47),
+                accent: Color::Rgb(9, 105, 218),
+                muted: Color::Rgb(101, 109, 118),
+                border: Color::Rgb(225, 228, 232),
+                header: Color::Rgb(31, 35, 40),
+                quote: Color::Rgb(87, 96, 106),
+                sel_bg: Color::Rgb(200, 218, 248),
+                sel_fg: Color::Rgb(31, 35, 40),
+            },
+            Theme::StandardNight => ThemeColors {
+                bg: Color::Rgb(32, 33, 36),
+                fg: Color::Rgb(225, 228, 232),
+                accent: Color::Rgb(88, 166, 255),
+                muted: Color::Rgb(139, 148, 158),
+                border: Color::Rgb(56, 58, 62),
+                header: Color::Rgb(138, 180, 248),
+                quote: Color::Rgb(139, 148, 158),
+                sel_bg: Color::Rgb(38, 79, 120),
+                sel_fg: Color::Rgb(255, 255, 255),
             },
         }
     }
@@ -237,6 +261,8 @@ enum MenuAction {
     ThemeDracula,
     ThemeDosEdit,
     ThemeVT100,
+    ThemeStandardDaylight,
+    ThemeStandardNight,
     WordWrap,
     SyntaxHighlighting,
     Undo,
@@ -351,6 +377,8 @@ impl App {
             "retro-amber" => Theme::RetroAmber,
             "dos-edit" | "dos" => Theme::DosEdit,
             "vt100" => Theme::VT100,
+            "standard-daylight" | "daylight" => Theme::StandardDaylight,
+            "standard-night" | "night" => Theme::StandardNight,
             _ => Theme::Dracula,
         };
 
@@ -418,6 +446,8 @@ impl App {
                 Theme::Dracula => "dracula".to_string(),
                 Theme::DosEdit => "dos-edit".to_string(),
                 Theme::VT100 => "vt100".to_string(),
+                Theme::StandardDaylight => "standard-daylight".to_string(),
+                Theme::StandardNight => "standard-night".to_string(),
             },
             word_wrap: self.word_wrap,
             view_mode: match self.view_mode {
@@ -1255,6 +1285,8 @@ impl App {
             MenuAction::ThemeDracula => { self.theme = Theme::Dracula; self.save_settings(); }
             MenuAction::ThemeDosEdit => { self.theme = Theme::DosEdit; self.save_settings(); }
             MenuAction::ThemeVT100 => { self.theme = Theme::VT100; self.save_settings(); }
+            MenuAction::ThemeStandardDaylight => { self.theme = Theme::StandardDaylight; self.save_settings(); }
+            MenuAction::ThemeStandardNight => { self.theme = Theme::StandardNight; self.save_settings(); }
             MenuAction::WordWrap => { self.word_wrap = !self.word_wrap; self.save_settings(); }
             MenuAction::SyntaxHighlighting => { self.syntax_highlighting = !self.syntax_highlighting; self.save_settings(); }
             MenuAction::Undo => self.undo(),
@@ -1328,6 +1360,8 @@ fn get_menu_items(menu: ActiveMenu) -> Vec<(&'static str, MenuAction)> {
             ("Syntax Highlighting (Cmd+Alt+6 / F6)", MenuAction::SyntaxHighlighting),
         ],
         ActiveMenu::Theme => vec![
+            ("Standard Daylight", MenuAction::ThemeStandardDaylight),
+            ("Standard Night", MenuAction::ThemeStandardNight),
             ("Dark Antigravity", MenuAction::ThemeDarkAntigravity),
             ("Retro Green CRT", MenuAction::ThemeRetroGreen),
             ("Retro Amber CRT", MenuAction::ThemeRetroAmber),
@@ -1408,7 +1442,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Usage: art [OPTIONS] [FILE]\n");
             println!("  -t, --text, --code Set initial mode to Pure Text / Code editor");
             println!("  --mode writer|markdown|split|pure-text|code");
-            println!("  --theme dark-antigravity|retro-green|retro-amber|dracula|dos-edit|vt100");
+            println!("  --theme standard-daylight|standard-night|dark-antigravity|retro-green|retro-amber|dracula|dos-edit|vt100");
             println!("  --vt100, --ascii   Force VT100/ASCII mode");
             println!("  -h, --help         Help");
             println!("  -v, --version      Version");
@@ -1444,6 +1478,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "dracula" => initial_theme = Some(Theme::Dracula),
                 "dos-edit" | "dos" => initial_theme = Some(Theme::DosEdit),
                 "vt100" | "ascii" => initial_theme = Some(Theme::VT100),
+                "standard-daylight" | "daylight" => initial_theme = Some(Theme::StandardDaylight),
+                "standard-night" | "night" => initial_theme = Some(Theme::StandardNight),
                 _ => initial_theme = Some(Theme::DarkAntigravity),
             }
             i += 1;
@@ -1454,6 +1490,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "dracula" => initial_theme = Some(Theme::Dracula),
                 "dos-edit" | "dos" => initial_theme = Some(Theme::DosEdit),
                 "vt100" | "ascii" => initial_theme = Some(Theme::VT100),
+                "standard-daylight" | "daylight" => initial_theme = Some(Theme::StandardDaylight),
+                "standard-night" | "night" => initial_theme = Some(Theme::StandardNight),
                 _ => initial_theme = Some(Theme::DarkAntigravity),
             }
         } else if !arg.starts_with('-') && initial_file.is_none() {
