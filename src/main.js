@@ -129,6 +129,28 @@ function getActiveFile() { return openFiles.find(f => f.id === activeFileId); }
 function getActiveFilePath() { const f = getActiveFile(); return f ? f.path : null; }
 function getCurrentFileDir() { const p = getActiveFilePath(); return p ? p.replace(/[/\\][^/\\]+$/, "") : null; }
 
+
+let statusResetTimer = null;
+function setStatus(msg, timeout = 3000) {
+  if (!statusMessageEl) {
+    statusMessageEl = document.getElementById("status-message");
+  }
+  if (!statusMessageEl) return;
+  statusMessageEl.textContent = msg;
+  if (statusResetTimer) {
+    clearTimeout(statusResetTimer);
+    statusResetTimer = null;
+  }
+  if (timeout > 0) {
+    statusResetTimer = setTimeout(() => {
+      if (statusMessageEl && statusMessageEl.textContent === msg) {
+        statusMessageEl.textContent = "Ready";
+      }
+      statusResetTimer = null;
+    }, timeout);
+  }
+}
+
 function ensureActiveFile() {
   let active = getActiveFile();
   if (!active) {
