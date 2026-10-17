@@ -100,12 +100,11 @@ deb-arm64: _arm64-check-tools
 	@echo "→ Building x86-64 Tauri .deb scaffold for metadata…"
 	$(CARGO_TAURI) build --bundles deb 2>/dev/null || true
 	@# Locate the freshest x86-64 .deb to use as the scaffold
-	$(eval X86_DEB := $(shell ls -t $(DEB_DIR)/$(APP_NAME)_$(APP_VERSION)*.deb 2>/dev/null \
-	  | grep -v arm64 | head -1))
-	@test -n "$(X86_DEB)" || (echo "ERROR: no x86-64 .deb scaffold found in $(DEB_DIR)/"; exit 1)
-	@echo "→ Repackaging as arm64 .deb using scaffold: $(X86_DEB)"
-	rm -rf $(ARM64_WORK_DIR)
-	dpkg-deb -R $(X86_DEB) $(ARM64_WORK_DIR)
+	@X86_DEB=$$(ls -t $(DEB_DIR)/$(APP_NAME)_$(APP_VERSION)*.deb 2>/dev/null | grep -v arm64 | head -1); \
+	test -n "$$X86_DEB" || (echo "ERROR: no x86-64 .deb scaffold found in $(DEB_DIR)/"; exit 1); \
+	echo "→ Repackaging as arm64 .deb using scaffold: $$X86_DEB"; \
+	rm -rf $(ARM64_WORK_DIR); \
+	dpkg-deb -R "$$X86_DEB" $(ARM64_WORK_DIR)
 	# Replace binary with ARM64 build
 	cp -f $(ARM64_BINARY) $(ARM64_WORK_DIR)/usr/bin/$(APP_NAME)
 	file $(ARM64_WORK_DIR)/usr/bin/$(APP_NAME)

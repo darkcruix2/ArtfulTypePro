@@ -129,6 +129,25 @@ function getActiveFile() { return openFiles.find(f => f.id === activeFileId); }
 function getActiveFilePath() { const f = getActiveFile(); return f ? f.path : null; }
 function getCurrentFileDir() { const p = getActiveFilePath(); return p ? p.replace(/[/\\][^/\\]+$/, "") : null; }
 
+function ensureActiveFile() {
+  let active = getActiveFile();
+  if (!active) {
+    const name = "untitled-" + untitledCounter++ + ".md";
+    active = {
+      id: "new-" + Date.now() + "-" + Math.random(),
+      path: null,
+      name: name,
+      content: "",
+      dirty: true
+    };
+    openFiles.push(active);
+    activeFileId = active.id;
+    if (typeof renderTabBar === "function") renderTabBar();
+    if (typeof renderFileList === "function") renderFileList();
+  }
+  return active;
+}
+
 let platform = "linux";
 let autoSaveTimer = null;
 
@@ -579,6 +598,20 @@ function resolveNextcloudImagePath(src, docRemotePath) {
 
 async function loadLocalImage(img, src) {
   try { src = decodeURI(src); } catch (e) {}
+  if (src.startsWith("__PENDING_IMAGE__/")) {
+    const fn = src.slice("__PENDING_IMAGE__/".length);
+    const pending = pendingPastedImages.get(fn);
+    if (pending && pending.dataUrl) {
+      img.setAttribute("src", pending.dataUrl);
+      return;
+    }
+  }
+
+  if (src.startsWith("data:") || src.startsWith("blob:")) {
+    img.setAttribute("src", src);
+    return;
+  }
+
   const active = getActiveFile();
   if (active && active.isNextcloud) {
     const ncPath = resolveNextcloudImagePath(src, active.remotePath);
@@ -637,7 +670,9 @@ async function loadLocalImage(img, src) {
     } catch (e) {}
   }
 
-  img.setAttribute("alt", (img.getAttribute("alt") || "") + " [not found]");
+  if (!img.getAttribute("alt")?.includes("[not found]")) {
+    img.setAttribute("alt", (img.getAttribute("alt") || "") + " [not found]");
+  }
 }
 
 async function fixImageSrcs(el) {
@@ -3316,92 +3351,368 @@ function applyLink() {
   }
 }
 
-function applyImageUpload() {
-  const active = getActiveFile();
-  if (!active) {
-    statusMessageEl.textContent = "No file is currently open.";
-    return;
+function generateImageFilename() {
+  const chars = "0123456789abcdef";
+  let hash = "";
+  for (let i = 0; i < 9; i++) {
+    hash += chars[Math.floor(Math.random() * chars.length)];
   }
-  
-  if (active.id.startsWith("untitled")) {
-    statusMessageEl.textContent = "Please save the document first to upload images.";
+  return `pic-${hash}.png`;
+}
+
+const pendingPastedImages = new Map(); // filename -> { bytes, dataUrl }
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return Array.from(bytes);
+}
+
+function dataUrlToBytes(dataUrl) {
+  const commaIdx = dataUrl.indexOf(",");
+  if (commaIdx === -1) return null;
+  const b64 = dataUrl.substring(commaIdx + 1);
+  return base64ToBytes(b64);
+}
+
+async function imageFileToPng(fileOrBlob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(fileOrBlob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 300;
+      canvas.height = img.naturalHeight || img.height || 200;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          const buf = await fileOrBlob.arrayBuffer();
+          resolve({ bytes: Array.from(new Uint8Array(buf)), dataUrl: canvas.toDataURL("image/png") });
+          return;
+        }
+        const buf = await blob.arrayBuffer();
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve({ bytes: Array.from(new Uint8Array(buf)), dataUrl });
+      }, "image/png");
+    };
+    img.onerror = async () => {
+      URL.revokeObjectURL(url);
+      try {
+        const buf = await fileOrBlob.arrayBuffer();
+        resolve({ bytes: Array.from(new Uint8Array(buf)), dataUrl: "" });
+      } catch (_) {
+        resolve(null);
+      }
+    };
+    img.src = url;
+  });
+}
+
+async function imageElementToPng(imgEl) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = imgEl.naturalWidth || imgEl.width || 300;
+    canvas.height = imgEl.naturalHeight || imgEl.height || 200;
+    const ctx = canvas.getContext("2d");
+    try {
+      ctx.drawImage(imgEl, 0, 0);
+      canvas.toBlob(async (blob) => {
+        if (!blob) { resolve(null); return; }
+        const buf = await blob.arrayBuffer();
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve({ bytes: Array.from(new Uint8Array(buf)), dataUrl });
+      }, "image/png");
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
+async function saveDocumentImageAsset(active, filename, bytes) {
+  const docName = active.name.replace(/^☁\s*/, "").replace(/\.md$/i, "");
+  if (active.isNextcloud) {
+    const remotePath = active.remotePath || "";
+    const lastSlash = remotePath.lastIndexOf("/");
+    const parentPath = lastSlash !== -1 ? remotePath.substring(0, lastSlash) : "";
+    const folderPath = parentPath ? `${parentPath}/${docName}` : docName;
+    const imagePath = `${folderPath}/${filename}`;
+    const markdownPath = `${docName}/${filename}`;
+    try {
+      await invoke("create_nextcloud_folder", { path: folderPath });
+    } catch (_) {}
+    await invoke("write_nextcloud_binary_file", { path: imagePath, content: bytes });
+    return { imagePath, markdownPath };
+  } else {
+    const localPath = active.path;
+    const separator = localPath && localPath.includes("\\") ? "\\" : "/";
+    const lastSlash = localPath ? localPath.lastIndexOf(separator) : -1;
+    const parentPath = lastSlash !== -1 ? localPath.substring(0, lastSlash) : "";
+    const folderPath = parentPath ? `${parentPath}${separator}${docName}` : docName;
+    const imagePath = `${folderPath}${separator}${filename}`;
+    const markdownPath = `${docName}/${filename}`;
+    await invoke("save_binary_file", { path: imagePath, content: bytes });
+    return { imagePath, markdownPath };
+  }
+}
+
+function checkClipboardForImage(e) {
+  const items = e.clipboardData?.items;
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.startsWith("image/")) {
+        return items[i].getAsFile();
+      }
+    }
+  }
+  if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+    for (let i = 0; i < e.clipboardData.files.length; i++) {
+      if (e.clipboardData.files[i].type?.startsWith("image/")) {
+        return e.clipboardData.files[i];
+      }
+    }
+  }
+  return null;
+}
+
+async function processPastedImageFile(imageFile) {
+  statusMessageEl.textContent = "Processing image…";
+  const pngData = await imageFileToPng(imageFile);
+  if (!pngData) {
+    statusMessageEl.textContent = "Failed to process image.";
     return;
   }
 
+  const filename = generateImageFilename();
+  const active = ensureActiveFile();
+
+  let markdownPath = "";
+  if (active && (active.path || (active.isNextcloud && active.remotePath))) {
+    try {
+      const res = await saveDocumentImageAsset(active, filename, pngData.bytes);
+      markdownPath = res.markdownPath;
+      statusMessageEl.textContent = `Saved image to ${markdownPath}`;
+    } catch (err) {
+      console.error("Error saving image asset:", err);
+      statusMessageEl.textContent = "Error saving image asset.";
+      pendingPastedImages.set(filename, pngData);
+      markdownPath = `__PENDING_IMAGE__/${filename}`;
+    }
+  } else {
+    pendingPastedImages.set(filename, pngData);
+    markdownPath = `__PENDING_IMAGE__/${filename}`;
+    statusMessageEl.textContent = "Image ready (will be saved when document is saved)";
+  }
+
+  if (!isMarkdownMode) {
+    restoreSelection();
+    const sel = window.getSelection();
+    let range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+
+    const img = document.createElement("img");
+    img.alt = filename;
+    img.className = "writer-image";
+    img.src = pngData.dataUrl || "";
+    img.dataset.originalSrc = markdownPath;
+    img.dataset.pendingFilename = filename;
+
+    if (range && writerViewEl.contains(range.startContainer)) {
+      const block = getBlockAncestor(range.startContainer);
+      if (block && block !== writerViewEl) {
+        if (!block.textContent.trim()) {
+          block.replaceWith(img);
+        } else {
+          block.after(img);
+        }
+      } else {
+        range.deleteContents();
+        range.insertNode(img);
+      }
+    } else {
+      writerViewEl.appendChild(img);
+    }
+
+    let nextEl = img.nextElementSibling;
+    if (!nextEl) {
+      const p = document.createElement("p");
+      p.appendChild(document.createElement("br"));
+      img.after(p);
+      nextEl = p;
+    }
+    placeCaret(nextEl, 0);
+    writerViewEl.focus();
+    setDirty(true);
+    debouncedStats();
+  } else {
+    const mdSnippet = `![${filename}](${markdownPath})\n\n`;
+    const ta = markdownInputEl;
+    const s = ta.selectionStart;
+    ta.value = ta.value.slice(0, s) + mdSnippet + ta.value.slice(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = s + mdSnippet.length;
+    ta.focus();
+    setDirty(true);
+    debouncedStats();
+  }
+
+  const ec = document.getElementById("editor-container");
+  if (ec) {
+    ec.scrollTop = 0;
+    ec.scrollLeft = 0;
+  }
+}
+
+function handleWriterPaste(e) {
+  const imageFile = checkClipboardForImage(e);
+  if (imageFile) {
+    e.preventDefault();
+    e.stopPropagation();
+    processPastedImageFile(imageFile);
+    return;
+  }
+  handleWriterDiagramPaste(e);
+}
+
+function handleMarkdownPaste(e) {
+  const imageFile = checkClipboardForImage(e);
+  if (imageFile) {
+    e.preventDefault();
+    e.stopPropagation();
+    processPastedImageFile(imageFile);
+  }
+}
+
+function handleEditorDragOver(e) {
+  if (e.dataTransfer?.types?.includes("Files")) {
+    e.preventDefault();
+  }
+}
+
+function handleEditorDrop(e) {
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].type?.startsWith("image/")) {
+      e.preventDefault();
+      e.stopPropagation();
+      processPastedImageFile(files[i]);
+      break;
+    }
+  }
+}
+
+async function processAndPersistImages(f) {
+  if (!f) return;
+  const docPath = f.path;
+  const isNc = f.isNextcloud;
+  if (!docPath && (!isNc || !f.remotePath)) return;
+
+  const docName = f.name.replace(/^☁\s*/, "").replace(/\.md$/i, "");
+
+  // 1. Flush any pending images from pendingPastedImages
+  for (const [filename, data] of Array.from(pendingPastedImages.entries())) {
+    try {
+      await saveDocumentImageAsset(f, filename, data.bytes);
+      const pendingRef = `__PENDING_IMAGE__/${filename}`;
+      const finalRelPath = `${docName}/${filename}`;
+
+      if (f.content && f.content.includes(pendingRef)) {
+        f.content = f.content.replaceAll(pendingRef, finalRelPath);
+      }
+      if (markdownInputEl && markdownInputEl.value.includes(pendingRef)) {
+        markdownInputEl.value = markdownInputEl.value.replaceAll(pendingRef, finalRelPath);
+      }
+      if (writerViewEl) {
+        const imgs = writerViewEl.querySelectorAll(`img[data-original-src*="${pendingRef}"], img[data-pending-filename="${filename}"]`);
+        imgs.forEach(img => {
+          img.dataset.originalSrc = finalRelPath;
+          delete img.dataset.pendingFilename;
+        });
+      }
+      pendingPastedImages.delete(filename);
+    } catch (err) {
+      console.error("Failed to persist pending image", filename, err);
+    }
+  }
+
+  // 2. Scan writerViewEl for any data: or blob: images
+  if (writerViewEl) {
+    const imgs = Array.from(writerViewEl.querySelectorAll("img"));
+    for (const img of imgs) {
+      const src = img.getAttribute("src") || "";
+      const origSrc = img.dataset.originalSrc || "";
+      const isDataUrl = src.startsWith("data:image/") || origSrc.startsWith("data:image/");
+      const isBlob = src.startsWith("blob:") || origSrc.startsWith("blob:");
+      const isUnsaved = !origSrc || origSrc.startsWith("data:") || origSrc.startsWith("blob:") || origSrc.startsWith("__PENDING_IMAGE__");
+
+      if ((isDataUrl || isBlob) && isUnsaved) {
+        try {
+          const filename = generateImageFilename();
+          let bytes = null;
+          if (src.startsWith("data:image/")) {
+            bytes = dataUrlToBytes(src);
+          } else {
+            const pngData = await imageElementToPng(img);
+            if (pngData) bytes = pngData.bytes;
+          }
+          if (bytes) {
+            await saveDocumentImageAsset(f, filename, bytes);
+            const finalRelPath = `${docName}/${filename}`;
+            img.dataset.originalSrc = finalRelPath;
+            if (origSrc && f.content) {
+              f.content = f.content.replaceAll(origSrc, finalRelPath);
+            }
+            if (origSrc && markdownInputEl) {
+              markdownInputEl.value = markdownInputEl.value.replaceAll(origSrc, finalRelPath);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to save embedded image", err);
+        }
+      }
+    }
+  }
+
+  // 3. Scan markdown text for any raw data:image/...;base64 URLs
+  const currentText = isMarkdownMode && markdownInputEl ? markdownInputEl.value : (f.content || "");
+  const dataUriRegex = /!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9+]+;base64,([A-Za-z0-9+/=]+))\)/g;
+  let match;
+  let updatedText = currentText;
+  while ((match = dataUriRegex.exec(currentText)) !== null) {
+    const fullMatch = match[0];
+    const altText = match[1];
+    const base64Data = match[3];
+    try {
+      const bytes = base64ToBytes(base64Data);
+      const filename = generateImageFilename();
+      await saveDocumentImageAsset(f, filename, bytes);
+      const finalRelPath = `${docName}/${filename}`;
+      const replacement = `![${altText || filename}](${finalRelPath})`;
+      updatedText = updatedText.replaceAll(fullMatch, replacement);
+    } catch (err) {
+      console.error("Failed to extract data URI from markdown", err);
+    }
+  }
+
+  if (updatedText !== currentText) {
+    f.content = updatedText;
+    if (markdownInputEl) markdownInputEl.value = updatedText;
+  }
+}
+
+function applyImageUpload() {
+  ensureActiveFile();
   const fileInput = document.getElementById("image-upload-input");
   fileInput.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = Array.from(new Uint8Array(buffer));
-      
-      const docName = active.name.replace(/^☁\s*/, "").replace(/\.md$/i, "");
-      const imageName = file.name || `image_${Date.now()}.png`;
-      let imagePath = "";
-      let markdownPath = "";
-
-      if (active.isNextcloud) {
-        const remotePath = active.remotePath || "";
-        const lastSlash = remotePath.lastIndexOf("/");
-        const parentPath = lastSlash !== -1 ? remotePath.substring(0, lastSlash) : "";
-        const folderPath = parentPath ? `${parentPath}/${docName}` : docName;
-        imagePath = `${folderPath}/${imageName}`;
-        markdownPath = `${docName}/${imageName}`;
-
-        try {
-          await invoke("create_nextcloud_folder", { path: folderPath });
-        } catch (err) {}
-        await invoke("write_nextcloud_binary_file", { path: imagePath, content: bytes });
-      } else {
-        const localPath = active.path;
-        const separator = localPath.includes("\\") ? "\\" : "/";
-        const lastSlash = localPath.lastIndexOf(separator);
-        const parentPath = lastSlash !== -1 ? localPath.substring(0, lastSlash) : "";
-        const folderPath = parentPath ? `${parentPath}${separator}${docName}` : docName;
-        imagePath = `${folderPath}${separator}${imageName}`;
-        markdownPath = `${docName}/${imageName}`;
-
-        await invoke("save_binary_file", { path: imagePath, content: bytes });
-      }
-
-      if (!isMarkdownMode) {
-        restoreSelection();
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0);
-          range.deleteContents();
-          
-          const img = document.createElement("img");
-          img.setAttribute("alt", imageName);
-          img.dataset.originalSrc = encodeURI(markdownPath);
-          img.className = "writer-image";
-          img.setAttribute("src", "");
-          
-          range.insertNode(img);
-          range.setStartAfter(img);
-          range.setEndAfter(img);
-          sel.removeAllRanges();
-          sel.addRange(range);
-          
-          if (typeof loadLocalImage === "function") {
-            loadLocalImage(img, markdownPath);
-          }
-        }
-        writerViewEl.focus();
-        debouncedStats();
-      } else {
-        const mdSnippet = `![${imageName}](${encodeURI(markdownPath)})`;
-        const ta = markdownInputEl;
-        const s = ta.selectionStart;
-        ta.value = ta.value.slice(0, s) + mdSnippet + ta.value.slice(ta.selectionEnd);
-        ta.selectionStart = ta.selectionEnd = s + mdSnippet.length;
-        ta.focus();
-        debouncedStats();
-      }
-      
-      statusMessageEl.textContent = `Image uploaded to ${docName}/${imageName}`;
+      await processPastedImageFile(file);
     } catch (err) {
       console.error("Upload error", err);
       statusMessageEl.textContent = "Failed to upload image.";
@@ -5003,7 +5314,6 @@ async function saveNextcloudAs(f, content, silent = false) {
 
 async function saveFile(silent = false) {
   try {
-    syncActiveFileContent();
     let f = getActiveFile();
     if (!f) {
       const currentContent = getCurrentMarkdown();
@@ -5013,6 +5323,12 @@ async function saveFile(silent = false) {
       activeFileId = f.id;
       renderTabBar(); renderFileList();
     }
+    
+    if (f.path || (f.isNextcloud && f.remotePath)) {
+      await processAndPersistImages(f);
+    }
+    syncActiveFileContent();
+
     const content = f.content;
     const isNcTabActive = document.getElementById("nextcloud-sidebar-container") && !document.getElementById("nextcloud-sidebar-container").classList.contains("hidden");
     if (f.isNextcloud && f.remotePath) {
@@ -5038,6 +5354,11 @@ async function saveFile(silent = false) {
         activeFileId = savedPath;
         f.name = savedPath.split(/[/\\]/).pop();
         addToRecentFiles(savedPath, f.name);
+
+        await processAndPersistImages(f);
+        syncActiveFileContent();
+        await invoke("save_file", { path: f.path, content: f.content });
+
         f.dirty = false;
         renderTabBar(); renderFileList();
         if (!silent) statusMessageEl.textContent = `Saved: ${f.name}`;
@@ -5058,7 +5379,6 @@ async function saveFile(silent = false) {
 
 async function saveFileAs(silent = false) {
   try {
-    syncActiveFileContent();
     let f = getActiveFile();
     if (!f) {
       const currentContent = getCurrentMarkdown();
@@ -5068,6 +5388,11 @@ async function saveFileAs(silent = false) {
       activeFileId = f.id;
       renderTabBar(); renderFileList();
     }
+    if (f.path || (f.isNextcloud && f.remotePath)) {
+      await processAndPersistImages(f);
+    }
+    syncActiveFileContent();
+
     const content = f.content;
     const isNcTabActive = document.getElementById("nextcloud-sidebar-container") && !document.getElementById("nextcloud-sidebar-container").classList.contains("hidden");
     if (ncConfig && (f.isNextcloud || isNcTabActive)) {
@@ -5082,6 +5407,11 @@ async function saveFileAs(silent = false) {
       activeFileId = savedPath;
       f.name = savedPath.split(/[/\\]/).pop();
       addToRecentFiles(savedPath, f.name);
+
+      await processAndPersistImages(f);
+      syncActiveFileContent();
+      await invoke("save_file", { path: f.path, content: f.content });
+
       f.dirty = false;
       renderTabBar(); renderFileList();
       if (!silent) statusMessageEl.textContent = `Saved: ${f.name}`;
@@ -5507,11 +5837,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // ── Input events ──
   writerViewEl.addEventListener("input", (e) => {
+    ensureActiveFile();
     writerViewIsEdited = true;
     handleLiveMarkdown(e);
     debouncedStats();
   });
   markdownInputEl.addEventListener("input", () => {
+    ensureActiveFile();
     writerViewIsEdited = false;
     debouncedStats();
   });
@@ -5532,7 +5864,22 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sup-btn")?.addEventListener("click",       () => applySuperscript());
   document.getElementById("link-btn")?.addEventListener("click",      () => applyLink());
   document.getElementById("mermaid-btn")?.addEventListener("click",   (e) => toggleDiagramMenu(e.currentTarget));
-  writerViewEl?.addEventListener("paste", handleWriterDiagramPaste, true);
+  writerViewEl?.addEventListener("paste", handleWriterPaste, true);
+  markdownInputEl?.addEventListener("paste", handleMarkdownPaste, true);
+  writerViewEl?.addEventListener("dragover", handleEditorDragOver);
+  writerViewEl?.addEventListener("drop", handleEditorDrop);
+  markdownInputEl?.addEventListener("dragover", handleEditorDragOver);
+  markdownInputEl?.addEventListener("drop", handleEditorDrop);
+
+  const editorContainer = document.getElementById("editor-container");
+  if (editorContainer) {
+    editorContainer.addEventListener("scroll", () => {
+      if (editorContainer.scrollTop !== 0 || editorContainer.scrollLeft !== 0) {
+        editorContainer.scrollTop = 0;
+        editorContainer.scrollLeft = 0;
+      }
+    });
+  }
   document.getElementById("image-btn")?.addEventListener("click",     () => applyImageUpload());
   document.getElementById("code-btn")?.addEventListener("click",   () => applyCode());
   document.getElementById("undo-btn")?.addEventListener("click",   doUndo);

@@ -70,7 +70,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artfultype-rs"
-version = "0.30.12"
+version = "0.30.13"
 dependencies = [
  "base64 0.22.1",
  "crossterm",

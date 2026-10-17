@@ -694,6 +694,7 @@ body {
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* ── Tab Bar ───────────────────────────────────────────────────────────────── */
@@ -704,6 +705,7 @@ body {
   min-height: 36px;
   overflow-x: auto;
   scrollbar-width: none;
+  flex-shrink: 0;
 }
 
 #tab-bar::-webkit-scrollbar { display: none; }
@@ -847,6 +849,7 @@ body {
 /* ── Editor Area ───────────────────────────────────────────────────────────── */
 #editor-area {
   flex: 1;
+  min-height: 0;
   position: relative;
   overflow: hidden;
 }
@@ -1382,6 +1385,8 @@ sup {
 #writer-view img,
 #writer-view .writer-image {
   max-width: 100%;
+  max-height: 600px;
+  object-fit: contain;
   height: auto;
   border-radius: 8px;
   display: block;

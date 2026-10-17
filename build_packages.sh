@@ -8,11 +8,13 @@ PUPPET_REPO="/mnt/volume1/MyCode/workspace/puppet-server"
 export PATH="/home/roland/.cargo/bin:$PATH"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
 
-echo "=============================================="
-echo " Starting ArtfulType Pro 0.30.12 Build Pipeline"
-echo "=============================================="
-
 cd "$SCRIPT_DIR"
+
+VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SCRIPT_DIR/src-tauri/Cargo.toml" | head -1)
+
+echo "=============================================="
+echo " Starting ArtfulType Pro $VERSION Build Pipeline"
+echo "=============================================="
 
 echo "→ Step 1/4: Building Host GUI .deb (x86-64)..."
 make deb
@@ -33,10 +35,10 @@ echo "=============================================="
 mkdir -p "$PUPPET_FILES"
 
 # Copy freshest packages
-LATEST_GUI_AMD64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_0.30.12*.deb | grep -v arm64 | head -1)
-LATEST_GUI_ARM64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_0.30.12*_arm64.deb | head -1)
-LATEST_CLI_AMD64=$(ls -t releases/artfultype-cli_0.30.12-*_amd64.deb | head -1)
-LATEST_CLI_ARM64=$(ls -t releases/artfultype-cli_0.30.12-*_arm64.deb | head -1)
+LATEST_GUI_AMD64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*.deb | grep -v arm64 | head -1)
+LATEST_GUI_ARM64=$(ls -t src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*_arm64.deb | head -1)
+LATEST_CLI_AMD64=$(ls -t releases/artfultype-cli_${VERSION}-*_amd64.deb | head -1)
+LATEST_CLI_ARM64=$(ls -t releases/artfultype-cli_${VERSION}-*_arm64.deb | head -1)
 
 echo "Copying $LATEST_GUI_AMD64 -> $PUPPET_FILES/artfultype-rs.deb"
 cp -f "$LATEST_GUI_AMD64" "$PUPPET_FILES/artfultype-rs.deb"
@@ -63,7 +65,7 @@ git add \
   code/environments/production/modules/profiles/manifests/artfultype.pp \
   code/environments/production/modules/profiles/manifests/artfultype_cli.pp
 
-git commit -m "feat: update artfultype-rs and artfultype-cli to v0.30.12"
+git commit -m "feat: update artfultype-rs and artfultype-cli to v${VERSION}"
 git push origin main
 
 echo "✓ Deployment complete! Running local puppet agent test..."
