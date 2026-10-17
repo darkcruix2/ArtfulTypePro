@@ -40,7 +40,7 @@ DESKTOPDIR  := $(SHAREDIR)/applications
 MANDIR      := $(SHAREDIR)/man/man1
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
-CARGO_TAURI := /home/roland/.cargo/bin/cargo-tauri
+CARGO_TAURI ?= $(shell command -v cargo-tauri 2>/dev/null || (test -x $(HOME)/.cargo/bin/cargo-tauri && echo $(HOME)/.cargo/bin/cargo-tauri) || echo cargo-tauri)
 INSTALL     := install
 CP          := cp -r
 

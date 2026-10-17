@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PUPPET_FILES="/mnt/volume1/MyCode/workspace/puppet-server/code/environments/production/modules/profiles/files"
 PUPPET_REPO="/mnt/volume1/MyCode/workspace/puppet-server"
 
-export PATH="/home/roland/.cargo/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
 
 cd "$SCRIPT_DIR"
@@ -17,7 +17,7 @@ echo " Starting ArtfulType Pro $VERSION Build Pipeline"
 echo "=============================================="
 
 echo "→ Step 1/6: Building Host GUI .deb and .rpm (x86-64)..."
-/home/roland/.cargo/bin/cargo-tauri build --bundles deb,rpm
+cargo-tauri build --bundles deb,rpm
 
 echo "→ Step 2/6: Building Host CLI (art) .deb (x86-64)..."
 make deb-cli
@@ -94,8 +94,10 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       "$LATEST_CLI_AMD64" \
       "$LATEST_CLI_ARM64" \
       releases/artfultype-rs-windows-x64.exe \
+      releases/artfultype-rs_${VERSION}_x64-setup.exe \
       releases/artfultype-cli-windows-x64.exe \
-      releases/artfultype-rs-${VERSION}*.rpm 2>/dev/null || true --clobber
+      releases/artfultype-rs-${VERSION}*.rpm \
+      --clobber || true
   else
     gh release create "v${VERSION}" \
       "$LATEST_GUI_AMD64" \
@@ -103,7 +105,9 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       "$LATEST_CLI_AMD64" \
       "$LATEST_CLI_ARM64" \
       releases/artfultype-rs-windows-x64.exe \
+      releases/artfultype-rs_${VERSION}_x64-setup.exe \
       releases/artfultype-cli-windows-x64.exe \
+      releases/artfultype-rs-${VERSION}*.rpm \
       --title "ArtfulType Pro v${VERSION}" \
       --generate-notes || true
   fi

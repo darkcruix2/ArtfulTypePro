@@ -46,11 +46,21 @@ jobs:
       - name: Build Debian Packages
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TAURI: cargo-tauri
         run: |
           make deb
           make deb-cli
           make deb-arm64
           make deb-cli-arm64
+
+      - name: Stage Release Artifacts
+        run: |
+          mkdir -p dist-release
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          cp -f src-tauri/target/release/bundle/deb/artfultype-rs_${VERSION}*.deb dist-release/
+          cp -f releases/artfultype-cli_${VERSION}*.deb dist-release/
+          echo "Artifacts to upload:"
+          ls -la dist-release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -60,6 +70,4 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            src-tauri/target/release/bundle/deb/artfultype-rs_*.deb
-            releases/artfultype-cli_*.deb
+          files: dist-release/*
