@@ -7,12 +7,34 @@ ANDROID_RES = "src-tauri/gen/android/app/src/main/res"
 
 
 def load_master(path):
-    """Load the master artwork and make the area outside the rounded square transparent."""
+    """Load the master artwork and make the area outside the rounded squircle transparent."""
+    from collections import deque
     img = Image.open(path).convert("RGBA")
     w, h = img.size
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((4, 4, w - 5, h - 5), radius=int(w * 0.17), fill=255)
-    img.putalpha(mask)
+    pixels = img.load()
+
+    # Flood-fill from the four corners to remove exterior light background cleanly
+    visited = [[False] * h for _ in range(w)]
+    queue = deque()
+    for sx, sy in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+        queue.append((sx, sy))
+        visited[sx][sy] = True
+
+    while queue:
+        x, y = queue.popleft()
+        r, g, b, a = pixels[x, y]
+        lum = (r + g + b) / 3.0
+        if lum > 95:
+            pixels[x, y] = (r, g, b, 0)
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if 0 <= nx < w and 0 <= ny < h and not visited[nx][ny]:
+                    visited[nx][ny] = True
+                    queue.append((nx, ny))
+        elif lum > 45:
+            # Smooth anti-aliased edge transition on the outer rim
+            alpha = int(max(0, min(255, (95 - lum) / 50.0 * 255)))
+            pixels[x, y] = (r, g, b, min(a, alpha))
+
     return img
 
 
