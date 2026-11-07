@@ -2710,20 +2710,30 @@ dialog:not([open]),
   margin-bottom: 0.25rem;
 }
 
+#writer-view li.task-list-item > ul.contains-task-list,
+#writer-view li.task-list-item > ol.contains-task-list {
+  padding-left: 0;
+}
+
 #writer-view li.task-list-item {
   list-style: none !important;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.55rem;
+  display: block;
+  position: relative;
+  padding-left: 1.7rem;
   margin-bottom: 0.35rem;
   line-height: 1.5;
+  min-height: 1.5em;
 }
 
 #writer-view li.task-list-item > ul,
 #writer-view li.task-list-item > ol {
-  flex-basis: 100%;
   width: 100%;
+}
+
+#writer-view li.task-list-item > .task-text {
+  display: inline;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 #writer-view li.task-list-item input[type="checkbox"] {
@@ -2739,9 +2749,9 @@ dialog:not([open]),
   align-items: center;
   justify-content: center;
   margin: 0;
-  flex-shrink: 0;
-  position: relative;
-  top: 3px;
+  position: absolute;
+  left: 0;
+  top: 0.22em;
   transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
 }
 

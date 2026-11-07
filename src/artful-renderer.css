@@ -408,11 +408,17 @@ ul.contains-task-list {
   padding-left: 4px;
 }
 
+li.task-list-item > ul.contains-task-list {
+  padding-left: 0;
+}
+
 li.task-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  list-style-type: none;
+  display: block;
+  position: relative;
+  padding-left: 24px;
   margin-bottom: 0.45em;
+  min-height: 1.5em;
 }
 
 li.task-list-item input[type="checkbox"] {
@@ -420,13 +426,14 @@ li.task-list-item input[type="checkbox"] {
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  margin-top: 3px;
+  margin: 0;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(0, 0, 0, 0.3);
   cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  top: 0.25em;
   transition: all 0.15s ease;
 }
 

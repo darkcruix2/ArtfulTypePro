@@ -2307,6 +2307,15 @@ async function renderMarkdownToWriter(markdownText) {
 }
 
 function ensureTaskTextSpan(li) {
+  // Unwrap loose task list <p> if it contains the leading checkbox
+  const firstP = li.querySelector(":scope > p");
+  if (firstP && firstP.querySelector("input[type='checkbox']")) {
+    while (firstP.firstChild) {
+      li.insertBefore(firstP.firstChild, firstP);
+    }
+    firstP.remove();
+  }
+
   let span = li.querySelector(":scope > span.task-text");
   if (!span) {
     span = document.createElement("span");
@@ -2330,10 +2339,25 @@ function ensureTaskTextSpan(li) {
       li.insertBefore(span, refNode);
       nodesToMove.forEach(n => span.appendChild(n));
     } else {
-      const tn = document.createTextNode("\u200B ");
+      const tn = document.createTextNode("\u200B");
       span.appendChild(tn);
       li.appendChild(span);
     }
+  } else {
+    // Move any stray inline nodes outside span.task-text (before nested UL/OL) into span.task-text
+    for (const child of Array.from(li.childNodes)) {
+      if (child === span) continue;
+      if (child.nodeType === Node.ELEMENT_NODE && (child.tagName === "INPUT" || child.tagName === "UL" || child.tagName === "OL")) {
+        continue;
+      }
+      span.appendChild(child);
+    }
+  }
+
+  // Strip leading whitespace on the first text node so wrapped lines align cleanly with line 1
+  if (span.firstChild && span.firstChild.nodeType === Node.TEXT_NODE) {
+    const cleaned = span.firstChild.textContent.replace(/^[\u200B\s]+/, "");
+    span.firstChild.textContent = cleaned ? cleaned : "\u200B";
   }
 }
 
@@ -3019,6 +3043,32 @@ function buildBlockquote(replaceTarget, remainingText) {
 
 
 
+function placeCaretAtEndOfLi(li) {
+  if (li.classList.contains("task-list-item") || li.querySelector(":scope > input[type='checkbox']")) {
+    ensureTaskTextSpan(li);
+  }
+  const taskSpan = li.querySelector(":scope > span.task-text");
+  const container = taskSpan || li;
+  let lastText = null;
+  const walk = (node) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        lastText = child;
+      } else if (child.nodeType === Node.ELEMENT_NODE && child.tagName !== "UL" && child.tagName !== "OL" && child.tagName !== "INPUT") {
+        walk(child);
+      }
+    }
+  };
+  walk(container);
+  if (lastText) {
+    placeCaret(lastText, lastText.textContent.length);
+  } else {
+    const tn = document.createTextNode("\u200B");
+    container.appendChild(tn);
+    placeCaret(tn, 1);
+  }
+}
+
 function indentListItem(li) {
   const prevLi = li.previousElementSibling;
   if (!prevLi || prevLi.tagName !== "LI") return false;
@@ -3031,12 +3081,13 @@ function indentListItem(li) {
       nestedList.classList.add("contains-task-list");
     }
     prevLi.appendChild(nestedList);
+  } else if (li.classList.contains("task-list-item") || li.querySelector("input[type='checkbox']")) {
+    nestedList.classList.add("contains-task-list");
   }
 
   nestedList.appendChild(li);
 
-  const targetText = Array.from(li.childNodes).find(n => n.nodeType === Node.TEXT_NODE) || li;
-  placeCaret(targetText, targetText.textContent ? targetText.textContent.length : 0);
+  placeCaretAtEndOfLi(li);
   writerViewEl.focus();
   debouncedStats();
   return true;
@@ -3049,6 +3100,9 @@ function outdentListItem(li) {
   const parentLi = parentList.closest("li");
   if (parentLi) {
     const grandParentList = parentLi.parentElement;
+    if (li.classList.contains("task-list-item") || li.querySelector("input[type='checkbox']")) {
+      grandParentList.classList.add("contains-task-list");
+    }
     if (parentLi.nextSibling) {
       grandParentList.insertBefore(li, parentLi.nextSibling);
     } else {
@@ -3057,11 +3111,22 @@ function outdentListItem(li) {
     if (parentList.children.length === 0) {
       parentList.remove();
     }
+    placeCaretAtEndOfLi(li);
   } else {
     const p = document.createElement("p");
-    const nodes = Array.from(li.childNodes).filter(n => n.nodeName !== "INPUT");
-    if (nodes.length === 0) p.appendChild(document.createElement("br"));
-    else nodes.forEach(n => p.appendChild(n));
+    const taskSpan = li.querySelector(":scope > span.task-text");
+    const sourceNodes = taskSpan
+      ? Array.from(taskSpan.childNodes)
+      : Array.from(li.childNodes).filter(n => n.nodeName !== "INPUT" && n.nodeName !== "UL" && n.nodeName !== "OL");
+    sourceNodes.forEach(n => {
+      if (n.nodeType === Node.TEXT_NODE) {
+        n.textContent = n.textContent.replace(/\u200B/g, "");
+      }
+      if (n.nodeType !== Node.TEXT_NODE || n.textContent.length > 0) {
+        p.appendChild(n);
+      }
+    });
+    if (p.childNodes.length === 0) p.appendChild(document.createElement("br"));
 
     if (parentList.nextSibling) {
       parentList.parentNode.insertBefore(p, parentList.nextSibling);
@@ -3104,14 +3169,15 @@ function buildTaskList(replaceTarget, remainingText, isChecked = false) {
 
   const span = document.createElement("span");
   span.className = "task-text";
-  const textVal = remainingText ? " " + remainingText : "\u200B ";
+  const cleanRemaining = remainingText ? remainingText.replace(/^\s+/, "") : "";
+  const textVal = cleanRemaining ? cleanRemaining : "\u200B";
   const tn = document.createTextNode(textVal);
   span.appendChild(tn);
 
   li.appendChild(cb);
   li.appendChild(span);
 
-  placeCaret(tn, 1);
+  placeCaret(tn, cleanRemaining ? 0 : 1);
   debouncedStats();
 }
 
@@ -3804,10 +3870,20 @@ function applyTaskList() {
     if (!block) return;
 
     if (block.tagName === "LI") {
-      const cb = block.querySelector("input[type='checkbox']");
+      const cb = block.querySelector(":scope > input[type='checkbox']");
       if (cb) {
         cb.remove();
+        const taskSpan = block.querySelector(":scope > span.task-text");
+        if (taskSpan) {
+          while (taskSpan.firstChild) {
+            block.insertBefore(taskSpan.firstChild, taskSpan);
+          }
+          taskSpan.remove();
+        }
         block.classList.remove("task-list-item");
+        if (block.parentElement && !block.parentElement.querySelector(":scope > li.task-list-item")) {
+          block.parentElement.classList.remove("contains-task-list");
+        }
       } else {
         block.classList.add("task-list-item");
         if (block.parentElement) block.parentElement.classList.add("contains-task-list");
@@ -3815,7 +3891,8 @@ function applyTaskList() {
         newCb.type = "checkbox";
         newCb.contentEditable = "false";
         block.insertBefore(newCb, block.firstChild);
-        block.insertBefore(document.createTextNode(" "), newCb.nextSibling);
+        ensureTaskTextSpan(block);
+        placeCaretAtEndOfLi(block);
       }
     } else {
       const text = block.textContent;
@@ -4798,21 +4875,33 @@ function handleWriterEnter(e) {
   if (block.tagName === "BLOCKQUOTE") return false;
 
   // ── Task list item Enter trigger ──
-  if (block.tagName === "LI" && (block.classList.contains("task-list-item") || block.querySelector("input[type='checkbox']"))) {
+  if (block.tagName === "LI" && (block.classList.contains("task-list-item") || block.querySelector(":scope > input[type='checkbox']"))) {
     const itemText = Array.from(block.childNodes)
-      .filter(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && n.tagName !== "INPUT"))
+      .filter(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && n.tagName !== "INPUT" && n.tagName !== "UL" && n.tagName !== "OL"))
       .map(n => n.textContent.replace(/\u200B/g, ""))
       .join("").trim();
     if (itemText === "") {
       e.preventDefault();
       const parentList = block.parentElement;
+      if (parentList && parentList.closest("li")) {
+        outdentListItem(block);
+        return true;
+      }
+      const p = document.createElement("p");
+      p.appendChild(document.createElement("br"));
+      if (parentList && parentList.parentNode) {
+        if (parentList.nextSibling) {
+          parentList.parentNode.insertBefore(p, parentList.nextSibling);
+        } else {
+          parentList.parentNode.appendChild(p);
+        }
+      } else {
+        writerViewEl.appendChild(p);
+      }
       block.remove();
       if (parentList && parentList.children.length === 0) {
         parentList.remove();
       }
-      const p = document.createElement("p");
-      p.appendChild(document.createElement("br"));
-      writerViewEl.appendChild(p);
       placeCaret(p, 0);
       writerViewEl.focus();
       debouncedStats();
@@ -4826,7 +4915,7 @@ function handleWriterEnter(e) {
       newCb.contentEditable = "false";
       const span = document.createElement("span");
       span.className = "task-text";
-      const tn = document.createTextNode("\u200B ");
+      const tn = document.createTextNode("\u200B");
       span.appendChild(tn);
       newLi.appendChild(newCb);
       newLi.appendChild(span);
